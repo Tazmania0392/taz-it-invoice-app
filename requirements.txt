@@ -1,4 +1,7 @@
 streamlit
 pandas
-openpyxl
 fpdf
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
