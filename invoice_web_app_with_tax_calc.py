@@ -174,7 +174,7 @@ def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, ta
     from googleapiclient.discovery import build
     sheet_service = build("sheets", "v4", credentials=creds)
 
-    spreadsheet_id = "1vBUF05rh5sF0IfoIYryJfJLqWXleAehlqXKT1pXFUHs"
+    spreadsheet_id = create_sheet_if_not_exists(creds)
     ensure_invoices_sheet_exists(sheet_service, spreadsheet_id)
     sheet_range = "Invoices!A:F"
     values = [[
@@ -192,9 +192,7 @@ def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, ta
 
 # BEGIN: Fixed create_sheet_if_not_exists
 # BEGIN: Updated for stability
-# create_sheet_if_not_exists removed (replaced by static ID)
 def create_sheet_if_not_exists(creds):
-    return "1vBUF05rh5sF0IfoIYryJfJLqWXleAehlqXKT1pXFUHs"
     import time
     drive = build("drive", "v3", credentials=creds)
 
