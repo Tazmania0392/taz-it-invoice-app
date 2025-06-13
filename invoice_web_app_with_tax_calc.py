@@ -190,7 +190,24 @@ def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, ta
         spreadsheetId=spreadsheet_id, range=sheet_range,
         valueInputOption="USER_ENTERED", body=body).execute()
 
+# BEGIN: Fixed create_sheet_if_not_exists
 def create_sheet_if_not_exists(creds):
+    drive = build("drive", "v3", credentials=creds)
+
+    # Search for the sheet in Drive
+    query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
+    result = drive.files().list(q=query, fields="files(id)").execute()
+    if result["files"]:
+        return result["files"][0]["id"]
+
+    # If not found, create new Google Sheet
+    file_metadata = {
+        "name": "Invoice_Log",
+        "mimeType": "application/vnd.google-apps.spreadsheet"
+    }
+    file = drive.files().create(body=file_metadata, fields="id").execute()
+    return file.get("id")
+# END
     drive = build("drive", "v3", credentials=creds)
     query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
     result = drive.files().list(q=query, fields="files(id)").execute()
