@@ -1,7 +1,13 @@
 
 def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
     # Check if 'Invoices' tab exists, create if not
-    sheets_metadata = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    try:
+        print("Trying to access spreadsheet:", spreadsheet_id)
+        sheets_metadata = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    except Exception as e:
+        st.error("Google Sheets API error:")
+        st.exception(e)
+        raise
     sheet_titles = [s["properties"]["title"] for s in sheets_metadata["sheets"]]
 
     if "Invoices" not in sheet_titles:
