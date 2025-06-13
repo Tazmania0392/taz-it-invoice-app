@@ -238,7 +238,12 @@ def create_sheet_if_not_exists(creds):
 
 if st.button("Generate & Upload Invoice"):
     
-status = st.selectbox("Invoice Status", ["Unpaid", "Paid"], index=0)
+        status = st.selectbox("Invoice Status", ["Unpaid", "Paid"], index=0)
+        due_date = st.date_input("Payment Due Date")
+        today = datetime.today().date()
+        late = today > due_date and status == "Unpaid"
+        status = "Late" if late else status
+
 
     valid_df = item_df.dropna(subset=["Description"])
     if valid_df.empty:
@@ -305,3 +310,15 @@ status = st.selectbox("Invoice Status", ["Unpaid", "Paid"], index=0)
             pdf.output("/tmp/invoice_log_export.pdf")
             with open("/tmp/invoice_log_export.pdf", "rb") as f:
                 st.download_button("📥 Download PDF", f.read(), file_name="invoice_log.pdf")
+
+
+        st.subheader("📋 Outstanding Invoices")
+        import gspread
+        from gspread_dataframe import get_as_dataframe
+        gc = gspread.authorize(creds)
+        sh = gc.open_by_key(spreadsheet_id)
+        worksheet = sh.worksheet("Invoices")
+        df = get_as_dataframe(worksheet, evaluate_formulas=True).dropna(how="all")
+
+        filtered = df[df["Status"].isin(["Unpaid", "Late"])]
+        st.dataframe(filtered)
