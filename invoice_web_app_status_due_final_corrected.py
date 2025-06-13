@@ -243,9 +243,8 @@ if st.button("Generate & Upload Invoice"):
     late = today > due_date and status == "Unpaid"
     status = "Late" if late else status
     valid_df = item_df.dropna(subset=["Description"])
-        if valid_df.empty:
-            st.warning("Please enter at least one line item.")
-    st.warning("Please enter at least one line item.")
+    if valid_df.empty:
+        st.warning("Please enter at least one line item.")
     else:
     filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
     drive_service, creds = get_drive_service()
