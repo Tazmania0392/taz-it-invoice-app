@@ -1,13 +1,7 @@
 
 def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
     # Check if 'Invoices' tab exists, create if not
-    try:
-        print("Trying to access spreadsheet:", spreadsheet_id)
-        sheets_metadata = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    except Exception as e:
-        st.error("Google Sheets API error:")
-        st.exception(e)
-        raise
+    sheets_metadata = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     sheet_titles = [s["properties"]["title"] for s in sheets_metadata["sheets"]]
 
     if "Invoices" not in sheet_titles:
@@ -28,7 +22,7 @@ def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
         ).execute()
 
         # Add headers
-        headers = [["Date", "Invoice #", "Client Name", "Amount (AWG)", "Tax Rate", "Drive File Link"]]
+        headers = [["Date", "Invoice #", "Client Name", "Amount (AWG)", "Tax Rate", "Drive File Link", "Status"]]
         sheet_service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range="Invoices!A1:F1",
@@ -211,7 +205,7 @@ def create_sheet_if_not_exists(creds):
     # Create fresh Google Sheet
     file_metadata = {
         "name": "Invoice_Log",
-        "mimeType": "application/vnd.google-apps.spreadsheet"
+        "mimeType": "application/vnd.google-apps.spreadsheet", "parents": ["1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"]
     }
     file = drive.files().create(body=file_metadata, fields="id").execute()
     time.sleep(2)  # allow time to fully provision sheet
@@ -228,7 +222,7 @@ def create_sheet_if_not_exists(creds):
     # If not found, create new Google Sheet
     file_metadata = {
         "name": "Invoice_Log",
-        "mimeType": "application/vnd.google-apps.spreadsheet"
+        "mimeType": "application/vnd.google-apps.spreadsheet", "parents": ["1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"]
     }
     file = drive.files().create(body=file_metadata, fields="id").execute()
     return file.get("id")
@@ -238,11 +232,14 @@ def create_sheet_if_not_exists(creds):
     result = drive.files().list(q=query, fields="files(id)").execute()
     if result["files"]:
         return result["files"][0]["id"]
-    file_metadata = {"name": "Invoice_Log", "mimeType": "application/vnd.google-apps.spreadsheet"}
+    file_metadata = {"name": "Invoice_Log", "mimeType": "application/vnd.google-apps.spreadsheet", "parents": ["1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"]}
     file = drive.files().create(body=file_metadata, fields="id").execute()
     return file.get("id")
 
 if st.button("Generate & Upload Invoice"):
+    
+status = st.selectbox("Invoice Status", ["Unpaid", "Paid"], index=0)
+
     valid_df = item_df.dropna(subset=["Description"])
     if valid_df.empty:
         st.warning("Please enter at least one line item.")
@@ -269,3 +266,42 @@ if st.button("Generate & Upload Invoice"):
         base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
         st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600px"></iframe>', unsafe_allow_html=True)
         st.download_button("📄 Download PDF", data=pdf_bytes, file_name=filename, mime="application/pdf")
+
+
+        st.subheader("📤 Export Invoice Log (Admin)")
+        if st.button("Download Invoice Log as Excel"):
+            import gspread
+            import pandas as pd
+            from gspread_dataframe import get_as_dataframe
+            gc = gspread.authorize(creds)
+            sh = gc.open_by_key(spreadsheet_id)
+            worksheet = sh.worksheet("Invoices")
+            df = get_as_dataframe(worksheet, evaluate_formulas=True).dropna(how="all")
+            df.to_excel("/tmp/invoice_log_export.xlsx", index=False)
+            with open("/tmp/invoice_log_export.xlsx", "rb") as f:
+                st.download_button("📥 Download Excel", f.read(), file_name="invoice_log.xlsx")
+
+        if st.button("Download Invoice Log as PDF"):
+            import gspread
+            from fpdf import FPDF
+            import pandas as pd
+            from gspread_dataframe import get_as_dataframe
+            gc = gspread.authorize(creds)
+            sh = gc.open_by_key(spreadsheet_id)
+            worksheet = sh.worksheet("Invoices")
+            df = get_as_dataframe(worksheet, evaluate_formulas=True).dropna(how="all")
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=10)
+            col_widths = [25, 25, 40, 25, 20, 60, 20]
+            headers = df.columns.tolist()
+            for i, header in enumerate(headers):
+                pdf.cell(col_widths[i], 8, str(header), border=1)
+            pdf.ln()
+            for _, row in df.iterrows():
+                for i, cell in enumerate(row):
+                    pdf.cell(col_widths[i], 8, str(cell), border=1)
+                pdf.ln()
+            pdf.output("/tmp/invoice_log_export.pdf")
+            with open("/tmp/invoice_log_export.pdf", "rb") as f:
+                st.download_button("📥 Download PDF", f.read(), file_name="invoice_log.pdf")
