@@ -1,59 +1,178 @@
-class InvoicePDF(FPDF):
-    def header(self):
-        self.set_font("Arial", "B", 16)
-        self.cell(0, 10, "INVOICE", ln=True, align="C")
-        # Add logo in the top-right corner
-        self.image("logo.png", x=160, y=10, w=30)  # Adjust path and size as needed
+# invoice_web_app.py
+import streamlit as st
+import pandas as pd
+from datetime import date
+from io import BytesIO
+from fpdf import FPDF
+import os
+import base64
+import tempfile
+import gspread
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
-    def add_company_info(self):
-        self.set_font("Arial", "", 10)
-        self.cell(100, 5, "Taz-IT Solutions", ln=True)
-        self.cell(100, 5, "Pos Chikito 99B", ln=True)
-        self.cell(100, 5, "Oranjestad, Aruba", ln=True)
-        self.cell(100, 5, "(+297) 699-7692 | jcroes@tazitsolution.com", ln=True)
-        self.ln(5)
+# --- SETUP ---
+GOOGLE_SERVICE_ACCOUNT = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
+SCOPES = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
+UPLOAD_FOLDER_NAME = "Invoices"
+SHEET_NAME = "Invoice_Log"
+SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 
-    def add_client_info(self, name, address, phone, invoice_no, invoice_date, due_date):
-        self.set_font("Arial", "", 10)
-        self.cell(100, 5, f"Bill To: {name}", ln=0)
-        self.cell(100, 5, f"Invoice #: {invoice_no}", ln=1)
-        self.cell(100, 5, address, ln=0)
-        self.cell(100, 5, f"Date: {invoice_date}", ln=1)
-        self.cell(100, 5, phone, ln=0)
-        self.cell(100, 5, f"Due: {due_date}", ln=1)
-        self.ln(5)
+creds = service_account.Credentials.from_service_account_info(GOOGLE_SERVICE_ACCOUNT, scopes=SCOPES)
+drive_service = build("drive", "v3", credentials=creds)
+sheet_service = build("sheets", "v4", credentials=creds)
 
-    def add_table(self, df):
-        self.set_fill_color(200, 0, 0)
-        self.set_text_color(255, 255, 255)
-        self.set_font("Arial", "B", 10)
-        headers = ["Description", "Units", "Qty", "Rate", "Total"]
-        col_widths = [60, 20, 20, 30, 30]
-        for i in range(len(headers)):
-            self.cell(col_widths[i], 8, headers[i], 1, 0, 'C', 1)
-        self.ln()
+# --- LAYOUT ---
+st.set_page_config("Taz-IT Invoicing App")
+st.title("🧾 Taz-IT Invoice Generator")
 
-        self.set_fill_color(255, 255, 255)
-        self.set_text_color(0, 0, 0)
-        self.set_font("Arial", "", 10)
-        for _, row in df.iterrows():
-            self.cell(col_widths[0], 8, str(row["Description"]), 1)
-            self.cell(col_widths[1], 8, str(row["Units"]), 1, 0, 'C')
-            self.cell(col_widths[2], 8, str(row["Qty"]), 1, 0, 'C')
-            self.cell(col_widths[3], 8, f"{row['Rate']:.2f} AWG", 1, 0, 'R')
-            self.cell(col_widths[4], 8, f"{row['Total']:.2f} AWG", 1, 0, 'R')
-            self.ln()
+col1, col2 = st.columns(2)
+with col1:
+    client_name = st.text_input("Client Name")
+    client_address = st.text_input("Client Address")
+    client_phone = st.text_input("Client Phone")
+with col2:
+    invoice_number = st.text_input("Invoice Number")
+    invoice_date = st.date_input("Invoice Date", value=date.today())
+    due_date = st.date_input("Due Date", value=invoice_date)
 
-    def add_summary(self, subtotal, tax, total):
-        self.ln(3)
-        labels = ["Subtotal", f"Tax (12%)", "Total"]
-        values = [f"{subtotal:.2f} AWG", f"{tax:.2f} AWG", f"{total:.2f} AWG"]
-        for i in range(3):
-            self.cell(130)
-            self.cell(30, 8, labels[i], 1)
-            self.cell(30, 8, values[i], 1, ln=1, align='R')
+tax_rate = st.number_input("Tax %", value=12.0)
+reverse_tax = st.checkbox("Apply Reverse Tax")
+total_price_after_tax = 0.0
+if reverse_tax:
+    total_price_after_tax = st.number_input("Enter total incl. tax (optional)", value=0.0)
 
-    def add_footer(self):
-        self.ln(10)
-        self.set_font("Arial", "I", 9)
-        self.multi_cell(0, 5, "Thank you for your business!\nPayment due within 14 days.\n\nBank Payment Info:\nBank: Aruba Bank\nAccount Name: Joshua Croes\nAccount Number: 3066850190\nSWIFT/BIC: ARUBAWAW\nCurrency: AWG")
+excel_file = st.file_uploader("Upload Excel Line Items", type="xlsx")
+status = st.selectbox("Invoice Status", ["Unpaid", "Paid"])
+
+def read_excel(file):
+    df = pd.read_excel(file)
+    df = df.dropna(subset=["Description"])
+    df["Units"] = df["Units"].astype(int)
+    df["Qty"] = df["Qty"].astype(int)
+    df["Rate"] = df["Rate"].astype(float)
+    df["Total"] = df["Units"] * df["Qty"] * df["Rate"]
+    return df
+
+def generate_pdf(df):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # Logo
+    pdf.image("logo.png", 150, 10, 40)
+
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(200, 10, "INVOICE", ln=True, align="C")
+    pdf.ln(10)
+
+    pdf.set_font("Arial", size=12)
+    pdf.cell(100, 10, "Taz-IT Solutions")
+    pdf.cell(100, 10, f"Invoice #: {invoice_number}", ln=True)
+    pdf.cell(100, 10, "Pos Chikito 99B\nOranjestad, Aruba")
+    pdf.cell(100, 10, f"Date: {invoice_date.strftime('%d-%b-%Y')}", ln=True)
+    pdf.cell(100, 10, f"(+297) 699-7692 | jcroes@tazitsolution.com")
+    pdf.cell(100, 10, f"Due: {due_date.strftime('%d-%b-%Y')}", ln=True)
+    pdf.ln(10)
+
+    pdf.cell(100, 10, f"Bill To: {client_name}")
+    pdf.cell(100, 10, f"{client_address}", ln=True)
+    pdf.cell(100, 10, client_phone, ln=True)
+    pdf.ln(10)
+
+    # Table header
+    pdf.set_fill_color(200, 0, 0)
+    pdf.set_text_color(255)
+    for col in ["Description", "Units", "Qty", "Rate", "Total"]:
+        pdf.cell(38 if col == "Description" else 30, 10, col, 1, 0, 'C', True)
+    pdf.ln()
+
+    pdf.set_text_color(0)
+    for _, row in df.iterrows():
+        pdf.cell(38, 10, str(row["Description"]), 1)
+        pdf.cell(30, 10, str(row["Units"]), 1)
+        pdf.cell(30, 10, str(row["Qty"]), 1)
+        pdf.cell(30, 10, f"{row['Rate']:.2f}", 1)
+        pdf.cell(30, 10, f"{row['Total']:.2f}", 1)
+        pdf.ln()
+
+    subtotal = df["Total"].sum()
+    tax = subtotal * (tax_rate / 100)
+    total = subtotal + tax
+
+    # Summary
+    for label, value in [("Subtotal", subtotal), (f"Tax ({tax_rate:.0f}%)", tax), ("Total", total)]:
+        pdf.cell(158)
+        pdf.cell(30, 10, label, 1)
+        pdf.cell(30, 10, f"{value:.2f} AWG", 1, ln=True)
+
+    pdf.ln(10)
+    pdf.set_font("Arial", "I", 11)
+    pdf.multi_cell(0, 10, "Thank you for your business!\n\nPayment due within 14 days.\n\nFor any questions, contact us at support@tazitsolution.com")
+
+    # Bank Info
+    pdf.ln(5)
+    pdf.set_font("Arial", size=11)
+    pdf.multi_cell(0, 8, """
+Bank Payment Info:
+Bank: Aruba Bank
+Account Name: Joshua Croes
+Account Number: 3066850190
+SWIFT/BIC: ARUBAWAW
+Currency: AWG""")
+
+    pdf_output = BytesIO()
+    pdf.output(pdf_output)
+    pdf_output.seek(0)
+    return pdf_output, total
+
+def upload_to_drive(file, filename, client_name):
+    # Ensure root folder
+    folders = drive_service.files().list(q="mimeType='application/vnd.google-apps.folder' and name='Invoices' and trashed=false").execute().get("files", [])
+    if folders:
+        parent_id = folders[0]["id"]
+    else:
+        file_metadata = {"name": "Invoices", "mimeType": "application/vnd.google-apps.folder"}
+        parent_id = drive_service.files().create(body=file_metadata, fields="id").execute()["id"]
+
+    # Ensure client subfolder
+    client_folders = drive_service.files().list(q=f"'{parent_id}' in parents and name='{client_name}' and trashed=false").execute().get("files", [])
+    if client_folders:
+        folder_id = client_folders[0]["id"]
+    else:
+        metadata = {"name": client_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]}
+        folder_id = drive_service.files().create(body=metadata, fields="id").execute()["id"]
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    temp.write(file.read())
+    temp.close()
+
+    media = MediaFileUpload(temp.name, mimetype="application/pdf")
+    metadata = {"name": filename, "parents": [folder_id]}
+    uploaded = drive_service.files().create(body=metadata, media_body=media, fields="id").execute()
+
+    os.remove(temp.name)
+    return f"https://drive.google.com/file/d/{uploaded['id']}/view"
+
+def log_to_sheet(date, invoice_no, name, amount, status, link):
+    values = [[str(date), str(invoice_no), name, f"{amount:.2f} AWG", status, link]]
+    sheet_service.spreadsheets().values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range="Invoices!A2",
+        valueInputOption="USER_ENTERED",
+        body={"values": values}
+    ).execute()
+
+# --- MAIN ACTION ---
+if st.button("Generate Invoice"):
+    if excel_file is not None:
+        df = read_excel(excel_file)
+        pdf_file, total_amt = generate_pdf(df)
+        file_name = f"Invoice_{invoice_number}_{client_name}.pdf"
+        link = upload_to_drive(pdf_file, file_name, client_name)
+        log_to_sheet(invoice_date, invoice_number, client_name, total_amt, status, link)
+
+        st.success("Invoice created and uploaded ✅")
+        st.markdown(f"[View PDF Invoice]({link})")
+    else:
+        st.error("Please upload an Excel file with line items.")
