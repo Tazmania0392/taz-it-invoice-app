@@ -5,9 +5,7 @@ from datetime import date
 from io import BytesIO
 from fpdf import FPDF
 import os
-import base64
 import tempfile
-import gspread
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -16,7 +14,6 @@ from googleapiclient.http import MediaFileUpload
 GOOGLE_SERVICE_ACCOUNT = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
 SCOPES = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
 UPLOAD_FOLDER_NAME = "Invoices"
-SHEET_NAME = "Invoice_Log"
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 
 creds = service_account.Credentials.from_service_account_info(GOOGLE_SERVICE_ACCOUNT, scopes=SCOPES)
@@ -58,35 +55,27 @@ def read_excel(file):
 def generate_pdf(df):
     pdf = FPDF()
     pdf.add_page()
-
-    # Logo
     pdf.image("tazit_logo_pdf.png", 150, 10, 40)
-
     pdf.set_font("Arial", "B", 16)
     pdf.cell(200, 10, "INVOICE", ln=True, align="C")
     pdf.ln(10)
-
     pdf.set_font("Arial", size=12)
     pdf.cell(100, 10, "Taz-IT Solutions")
     pdf.cell(100, 10, f"Invoice #: {invoice_number}", ln=True)
-    pdf.cell(100, 10, "Pos Chikito 99B\nOranjestad, Aruba")
-    pdf.cell(100, 10, f"Date: {invoice_date.strftime('%d-%b-%Y')}", ln=True)
-    pdf.cell(100, 10, f"(+297) 699-7692 | jcroes@tazitsolution.com")
-    pdf.cell(100, 10, f"Due: {due_date.strftime('%d-%b-%Y')}", ln=True)
+    pdf.cell(100, 10, "Pos Chikito 99B, Aruba")
+    pdf.cell(100, 10, f"Date: {invoice_date.strftime('%Y-%m-%d')}", ln=True)
+    pdf.cell(100, 10, "(+297) 699-7692 | jcroes@tazitsolution.com")
+    pdf.cell(100, 10, f"Due: {due_date.strftime('%Y-%m-%d')}", ln=True)
     pdf.ln(10)
-
     pdf.cell(100, 10, f"Bill To: {client_name}")
     pdf.cell(100, 10, f"{client_address}", ln=True)
     pdf.cell(100, 10, client_phone, ln=True)
     pdf.ln(10)
-
-    # Table header
     pdf.set_fill_color(200, 0, 0)
     pdf.set_text_color(255)
     for col in ["Description", "Units", "Qty", "Rate", "Total"]:
         pdf.cell(38 if col == "Description" else 30, 10, col, 1, 0, 'C', True)
     pdf.ln()
-
     pdf.set_text_color(0)
     for _, row in df.iterrows():
         pdf.cell(38, 10, str(row["Description"]), 1)
@@ -95,62 +84,41 @@ def generate_pdf(df):
         pdf.cell(30, 10, f"{row['Rate']:.2f}", 1)
         pdf.cell(30, 10, f"{row['Total']:.2f}", 1)
         pdf.ln()
-
     subtotal = df["Total"].sum()
     tax = subtotal * (tax_rate / 100)
     total = subtotal + tax
-
-    # Summary
     for label, value in [("Subtotal", subtotal), (f"Tax ({tax_rate:.0f}%)", tax), ("Total", total)]:
         pdf.cell(158)
         pdf.cell(30, 10, label, 1)
         pdf.cell(30, 10, f"{value:.2f} AWG", 1, ln=True)
-
     pdf.ln(10)
     pdf.set_font("Arial", "I", 11)
     pdf.multi_cell(0, 10, "Thank you for your business!\n\nPayment due within 14 days.\n\nFor any questions, contact us at support@tazitsolution.com")
-
-    # Bank Info
     pdf.ln(5)
     pdf.set_font("Arial", size=11)
-    pdf.multi_cell(0, 8, """
-Bank Payment Info:
-Bank: Aruba Bank
-Account Name: Joshua Croes
-Account Number: 3066850190
-SWIFT/BIC: ARUBAWAW
-Currency: AWG""")
-
+    pdf.multi_cell(0, 8, "Bank Payment Info:\nBank: Aruba Bank\nAccount Name: Joshua Croes\nAccount Number: 3066850190\nSWIFT/BIC: ARUBAWAW\nCurrency: AWG")
     pdf_output = BytesIO()
     pdf.output(pdf_output)
     pdf_output.seek(0)
     return pdf_output, total
 
 def upload_to_drive(file, filename, client_name):
-    # Ensure root folder
     folders = drive_service.files().list(q="mimeType='application/vnd.google-apps.folder' and name='Invoices' and trashed=false").execute().get("files", [])
     if folders:
         parent_id = folders[0]["id"]
     else:
-        file_metadata = {"name": "Invoices", "mimeType": "application/vnd.google-apps.folder"}
-        parent_id = drive_service.files().create(body=file_metadata, fields="id").execute()["id"]
-
-    # Ensure client subfolder
+        parent_id = drive_service.files().create(body={"name": "Invoices", "mimeType": "application/vnd.google-apps.folder"}, fields="id").execute()["id"]
     client_folders = drive_service.files().list(q=f"'{parent_id}' in parents and name='{client_name}' and trashed=false").execute().get("files", [])
     if client_folders:
         folder_id = client_folders[0]["id"]
     else:
-        metadata = {"name": client_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]}
-        folder_id = drive_service.files().create(body=metadata, fields="id").execute()["id"]
-
+        folder_id = drive_service.files().create(body={"name": client_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]}, fields="id").execute()["id"]
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     temp.write(file.read())
     temp.close()
-
     media = MediaFileUpload(temp.name, mimetype="application/pdf")
     metadata = {"name": filename, "parents": [folder_id]}
     uploaded = drive_service.files().create(body=metadata, media_body=media, fields="id").execute()
-
     os.remove(temp.name)
     return f"https://drive.google.com/file/d/{uploaded['id']}/view"
 
@@ -163,7 +131,6 @@ def log_to_sheet(date, invoice_no, name, amount, status, link):
         body={"values": values}
     ).execute()
 
-# --- MAIN ACTION ---
 if st.button("Generate Invoice"):
     if excel_file is not None:
         df = read_excel(excel_file)
@@ -171,7 +138,6 @@ if st.button("Generate Invoice"):
         file_name = f"Invoice_{invoice_number}_{client_name}.pdf"
         link = upload_to_drive(pdf_file, file_name, client_name)
         log_to_sheet(invoice_date, invoice_number, client_name, total_amt, status, link)
-
         st.success("Invoice created and uploaded ✅")
         st.markdown(f"[View PDF Invoice]({link})")
     else:
