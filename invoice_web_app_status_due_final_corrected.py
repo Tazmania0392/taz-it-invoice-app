@@ -18,7 +18,7 @@ creds = service_account.Credentials.from_service_account_info(
 
 # Google Drive and Sheet config
 SPREADSHEET_ID = "your-google-sheet-id"
-PARENT_FOLDER_ID = "your-drive-folder-id"  # Leave blank or None to test without upload to folder
+PARENT_FOLDER_ID = "1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"
 
 def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
     try:
@@ -120,9 +120,7 @@ if st.button("Generate & Upload Invoice"):
                 drive_service = build("drive", "v3", credentials=creds)
                 media = MediaFileUpload(tmp.name, mimetype="application/pdf")
 
-                file_metadata = {"name": filename}
-                if PARENT_FOLDER_ID:
-                    file_metadata["parents"] = [PARENT_FOLDER_ID]
+                file_metadata = {"name": filename, "parents": ["1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"]}
 
                 uploaded_file = drive_service.files().create(
                     body=file_metadata,
