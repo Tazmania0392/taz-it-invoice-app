@@ -1,157 +1,157 @@
-
-# streamlit_invoice_app_final.py
-
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
-from io import BytesIO
-import datetime
-import tempfile
-import os
-
+from datetime import datetime, date
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import tempfile
+import os
+import io
 
-# Constants
-FOLDER_NAME = "Invoices"
-LOGO_PATH = "logo.png"  # Ensure logo is deployed
-BRANDING_MESSAGE = "Thank you for your business! Payment due within 14 days.\nFor any questions, contact us at support@tazitsolution.com"
-COMPANY_INFO = "Taz IT Solution\nPos Chikito 99B, Aruba\n+297 6997692\njcroes@tazitsolution.com\nwww.tazitsolution.com"
+# --- Google Drive Setup ---
+SERVICE_ACCOUNT_JSON = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
+INVOICE_FOLDER_ID = "1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"
+SHEET_ID = "1vBUF05rh5sF0IfoIYryJfJLqWXleAehlqXKT1pXFUHs"
 
-# Streamlit UI
-st.set_page_config(page_title="Taz IT Invoice Generator", layout="centered")
-st.title("📄 Taz IT Invoice Generator")
+def get_drive_service():
+    creds = service_account.Credentials.from_service_account_info(
+        SERVICE_ACCOUNT_JSON,
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
+    return build("drive", "v3", credentials=creds)
 
-# Input fields
-invoice_number = st.text_input("Invoice Number")
-invoice_date = st.date_input("Invoice Date", value=datetime.date.today())
-client_name = st.text_input("Client Business Name")
-client_address = st.text_area("Client Address")
-client_phone = st.text_input("Client Phone Number")
-due_date = st.date_input("Due Date")
-tax_rate = st.number_input("Tax Rate (%)", min_value=0.0, max_value=100.0, value=12.0)
-reverse_tax = st.checkbox("Apply Reverse Tax")
+def get_sheets_service():
+    creds = service_account.Credentials.from_service_account_info(
+        SERVICE_ACCOUNT_JSON,
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return build("sheets", "v4", credentials=creds)
 
-uploaded_file = st.file_uploader("Upload Excel Line Items", type=["xlsx"])
+# --- PDF Generation Class ---
+class InvoicePDF(FPDF):
+    def header(self):
+        self.set_font("Arial", "B", 16)
+        self.cell(0, 10, "INVOICE", ln=True, align="C")
 
-status_option = st.selectbox("Invoice Status", ["Unpaid", "Paid"])
+    def add_company_info(self):
+        self.set_font("Arial", "", 10)
+        self.cell(100, 5, "Taz-IT Solutions", ln=True)
+        self.cell(100, 5, "Pos Chikito 99B", ln=True)
+        self.cell(100, 5, "Oranjestad, Aruba", ln=True)
+        self.cell(100, 5, "(+297) 699-7692 | jcroes@tazitsolution.com", ln=True)
+        self.ln(5)
 
-GOOGLE_SERVICE_ACCOUNT = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
-SERVICE_ACCOUNT_FILE = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-SERVICE_ACCOUNT_FILE.write(GOOGLE_SERVICE_ACCOUNT.encode())
-SERVICE_ACCOUNT_FILE.close()
+    def add_client_info(self, name, address, phone, invoice_no, invoice_date, due_date):
+        self.set_font("Arial", "", 10)
+        self.cell(100, 5, f"Bill To: {name}", ln=0)
+        self.cell(100, 5, f"Invoice #: {invoice_no}", ln=1)
+        self.cell(100, 5, address, ln=0)
+        self.cell(100, 5, f"Date: {invoice_date}", ln=1)
+        self.cell(100, 5, phone, ln=0)
+        self.cell(100, 5, f"Due: {due_date}", ln=1)
+        self.ln(5)
 
-creds = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE.name,
-    scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
-)
-drive_service = build("drive", "v3", credentials=creds)
-sheet_service = build("sheets", "v4", credentials=creds)
+    def add_table(self, df):
+        self.set_fill_color(200, 0, 0)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Arial", "B", 10)
+        headers = ["Description", "Units", "Qty", "Rate", "Total"]
+        col_widths = [60, 20, 20, 30, 30]
+        for i in range(len(headers)):
+            self.cell(col_widths[i], 8, headers[i], 1, 0, 'C', 1)
+        self.ln()
 
-def generate_pdf(buffer, rows, total, logo_path=None):
-    pdf = FPDF()
-    pdf.add_page()
-    if logo_path and os.path.exists(logo_path):
-        pdf.image(logo_path, x=150, y=10, w=40)
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(200, 10, "INVOICE", ln=True, align="C")
+        self.set_fill_color(255, 255, 255)
+        self.set_text_color(0, 0, 0)
+        self.set_font("Arial", "", 10)
+        for _, row in df.iterrows():
+            self.cell(col_widths[0], 8, str(row["Description"]), 1)
+            self.cell(col_widths[1], 8, str(row["Units"]), 1, 0, 'C')
+            self.cell(col_widths[2], 8, str(row["Qty"]), 1, 0, 'C')
+            self.cell(col_widths[3], 8, f"{row['Rate']:.2f}", 1, 0, 'R')
+            self.cell(col_widths[4], 8, f"{row['Total']:.2f}", 1, 0, 'R')
+            self.ln()
 
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 8, COMPANY_INFO)
-    pdf.ln(2)
-    pdf.multi_cell(0, 8, f"Client: {client_name}\nAddress: {client_address}\nPhone: {client_phone}")
-    pdf.ln(1)
-    pdf.cell(0, 8, f"Invoice No: {invoice_number}    Date: {invoice_date}    Due: {due_date}", ln=True)
+    def add_summary(self, subtotal, tax, total):
+        self.ln(3)
+        labels = ["Subtotal", f"Tax (12%)", "Total"]
+        values = [f"{subtotal:.2f} AWG", f"{tax:.2f} AWG", f"{total:.2f} AWG"]
+        for i in range(3):
+            self.cell(130)
+            self.cell(30, 8, labels[i], 1)
+            self.cell(30, 8, values[i], 1, ln=1, align='R')
 
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(50, 10, "Description", 1)
-    pdf.cell(30, 10, "Qty", 1)
-    pdf.cell(40, 10, "Rate (AWG)", 1)
-    pdf.cell(40, 10, "Total (AWG)", 1)
-    pdf.ln()
+    def add_footer(self):
+        self.ln(10)
+        self.set_font("Arial", "I", 9)
+        self.multi_cell(0, 5, "Thank you for your business!\nPayment due within 14 days.\n\nBank Payment Info:\nBank: Aruba Bank\nAccount Name: Joshua Croes\nAccount Number: 3066850190\nSWIFT/BIC: ARUBAWAW\nCurrency: AWG")
 
-    pdf.set_font("Arial", "", 12)
-    for _, row in rows.iterrows():
-        pdf.cell(50, 10, str(row["Description"]), 1)
-        pdf.cell(30, 10, str(row["Qty"]), 1)
-        pdf.cell(40, 10, str(row["Rate (AWG)"]), 1)
-        pdf.cell(40, 10, str(row["Total (AWG)"]), 1)
-        pdf.ln()
+# --- Streamlit UI ---
+st.title("📄 Taz-IT Invoice Generator")
 
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(120, 10, "Subtotal", 1)
-    pdf.cell(40, 10, f"{total:.2f}", 1)
-    pdf.ln()
+client_name = st.text_input("Client Name", "Bon Vibe")
+client_address = st.text_input("Client Address", "Kerkstraat 4, Aruba")
+client_phone = st.text_input("Client Phone", "297 746 3522")
+invoice_number = st.text_input("Invoice Number", "1001")
+invoice_date = st.date_input("Invoice Date", date.today())
+due_date = st.date_input("Payment Due Date", date.today())
+tax_rate = st.number_input("Tax %", value=12.0)
 
-    tax_amount = 0 if reverse_tax else (tax_rate / 100) * total
-    total_due = total if reverse_tax else total + tax_amount
+excel_file = st.file_uploader("Upload Excel Line Items", type=["xlsx"])
+status = st.selectbox("Invoice Status", ["Unpaid", "Paid"])
 
-    if not reverse_tax:
-        pdf.cell(120, 10, f"Tax ({tax_rate}%)", 1)
-        pdf.cell(40, 10, f"{tax_amount:.2f}", 1)
-        pdf.ln()
+if st.button("Generate Invoice"):
+    if excel_file is not None:
+        df = pd.read_excel(excel_file)
+        df = df.dropna(subset=["Description"])
+        df["Total"] = df["Qty"] * df["Rate"]
+        subtotal = df["Total"].sum()
+        tax = subtotal * (tax_rate / 100)
+        total = subtotal + tax
 
-    pdf.cell(120, 10, "Total Due", 1)
-    pdf.cell(40, 10, f"{total_due:.2f}", 1)
-    pdf.ln(10)
+        # Generate PDF
+        pdf = InvoicePDF()
+        pdf.add_page()
+        pdf.add_company_info()
+        pdf.add_client_info(client_name, client_address, client_phone, invoice_number, invoice_date.strftime("%d-%b-%Y"), due_date.strftime("%d-%b-%Y"))
+        pdf.add_table(df)
+        pdf.add_summary(subtotal, tax, total)
+        pdf.add_footer()
 
-    pdf.set_font("Arial", "", 11)
-    pdf.multi_cell(0, 8, BRANDING_MESSAGE)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            pdf.output(tmp_file.name)
+            tmp_path = tmp_file.name
 
-    pdf.output(buffer)
-    buffer.seek(0)
-    return buffer, total_due
+        # Upload to Drive
+        drive_service = get_drive_service()
+        client_folder = None
+        response = drive_service.files().list(q=f"'{INVOICE_FOLDER_ID}' in parents and name='{client_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false", fields="files(id)").execute()
+        if response['files']:
+            client_folder = response['files'][0]['id']
+        else:
+            file_metadata = {
+                'name': client_name,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': [INVOICE_FOLDER_ID]
+            }
+            folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+            client_folder = folder['id']
 
-def create_folder_if_not_exists(folder_name, parent_id=None):
-    query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
-    if parent_id:
-        query += f" and '{parent_id}' in parents"
-    folders = drive_service.files().list(q=query, fields="files(id)").execute()
-    if folders["files"]:
-        return folders["files"][0]["id"]
-    metadata = {"name": folder_name, "mimeType": "application/vnd.google-apps.folder"}
-    if parent_id:
-        metadata["parents"] = [parent_id]
-    folder = drive_service.files().create(body=metadata, fields="id").execute()
-    return folder["id"]
+        filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
+        media = MediaFileUpload(tmp_path, mimetype='application/pdf')
+        file_metadata = {"name": filename, "parents": [client_folder]}
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
 
-def upload_pdf_to_drive(buffer, filename, parent_folder):
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    temp.write(buffer.read())
-    temp.seek(0)
-    media = MediaFileUpload(temp.name, mimetype="application/pdf")
-    file = drive_service.files().create(body={"name": filename, "parents": [parent_folder]}, media_body=media, fields="id").execute()
-    return file["id"]
+        # Log to Sheets
+        sheets_service = get_sheets_service()
+        values = [[str(invoice_date), invoice_number, client_name, f"{total:.2f}", f"{tax_rate:.2f}%", status]]
+        sheets_service.spreadsheets().values().append(
+            spreadsheetId=SHEET_ID,
+            range="Invoices!A2",
+            valueInputOption="USER_ENTERED",
+            body={"values": values}
+        ).execute()
 
-def log_to_sheets(spreadsheet_id, values):
-    sheet_service.spreadsheets().values().append(
-        spreadsheetId=spreadsheet_id,
-        range="Invoices!A2",
-        valueInputOption="USER_ENTERED",
-        body={"values": [values]}
-    ).execute()
-
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
-    df["Total (AWG)"] = df["Qty"] * df["Rate (AWG)"]
-    total = df["Total (AWG)"].sum()
-
-    with BytesIO() as buffer:
-        pdf_buffer, total_due = generate_pdf(buffer, df, total, LOGO_PATH)
-        invoice_filename = f"{invoice_number}_{client_name.replace(' ', '_')}.pdf"
-
-        base_folder = create_folder_if_not_exists(FOLDER_NAME)
-        client_folder = create_folder_if_not_exists(client_name, parent_id=base_folder)
-        file_id = upload_pdf_to_drive(pdf_buffer, invoice_filename, parent_folder=client_folder)
-
-        overdue = datetime.date.today() > due_date
-        spreadsheet_id = "your-google-sheet-id"
-        log_to_sheets(spreadsheet_id, [
-            str(invoice_number), str(invoice_date), str(due_date),
-            client_name, f"{total_due:.2f}", "Reverse" if reverse_tax else f"{tax_rate}%",
-            "Late" if overdue and status_option == "Unpaid" else "On Time", status_option
-        ])
-
-        st.success("Invoice PDF generated and uploaded successfully.")
-        st.download_button("Download Invoice", data=pdf_buffer, file_name=invoice_filename, mime="application/pdf")
+        st.success(f"✅ Invoice uploaded and logged.")
+        st.download_button("⬇️ Download Invoice", data=open(tmp_path, "rb"), file_name=filename, mime="application/pdf")
