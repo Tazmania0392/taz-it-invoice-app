@@ -1,7 +1,7 @@
-streamlit
-pandas
-fpdf
-gspread
-gspread-dataframe
-google-auth
-google-api-python-client
+streamlit==1.35.0
+pandas==2.2.2
+fpdf==1.7.2
+google-api-python-client==2.126.0
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+openpyxl==3.1.2
