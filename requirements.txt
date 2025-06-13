@@ -1,7 +1,7 @@
 streamlit
 pandas
 fpdf
+gspread
+gspread-dataframe
 google-auth
-google-auth-oauthlib
-google-auth-httplib2
 google-api-python-client
