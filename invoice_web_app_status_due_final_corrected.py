@@ -16,8 +16,9 @@ creds = service_account.Credentials.from_service_account_info(
     scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
 )
 
+# Google Drive and Sheet config
 SPREADSHEET_ID = "your-google-sheet-id"
-PARENT_FOLDER_ID = "your-drive-folder-id"
+PARENT_FOLDER_ID = "your-drive-folder-id"  # Leave blank or None to test without upload to folder
 
 def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
     try:
@@ -69,65 +70,79 @@ if st.button("Generate & Upload Invoice"):
     if valid_df.empty:
         st.warning("Please enter at least one line item.")
     else:
-        valid_df["Total"] = valid_df["Units"].astype(float) * valid_df["Qty"].astype(float) * valid_df["Rate (AWG)"].astype(float)
-        subtotal = valid_df["Total"].sum()
-        tax = subtotal * (tax_rate / 100)
-        total = subtotal + tax
+        try:
+            valid_df["Total"] = valid_df["Units"].astype(float) * valid_df["Qty"].astype(float) * valid_df["Rate (AWG)"].astype(float)
+            subtotal = valid_df["Total"].sum()
+            tax = subtotal * (tax_rate / 100)
+            total = subtotal + tax
 
-        # PDF Generation
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(200, 10, "INVOICE", ln=True, align="C")
-        pdf.set_font("Arial", size=10)
-        pdf.cell(100, 8, "Taz-IT Solutions", ln=1)
-        pdf.cell(100, 8, f"Client: {client_name}", ln=1)
-        pdf.cell(100, 8, f"Date: {invoice_date}", ln=1)
-        pdf.cell(100, 8, f"Due: {due_date}", ln=1)
-        pdf.ln(5)
-        pdf.set_font("Arial", "B", 10)
-        pdf.cell(60, 8, "Description", 1)
-        pdf.cell(20, 8, "Units", 1)
-        pdf.cell(20, 8, "Qty", 1)
-        pdf.cell(30, 8, "Rate", 1)
-        pdf.cell(30, 8, "Total", 1)
-        pdf.ln()
-        pdf.set_font("Arial", size=10)
-        for _, row in valid_df.iterrows():
-            pdf.cell(60, 8, str(row["Description"]), 1)
-            pdf.cell(20, 8, str(row["Units"]), 1)
-            pdf.cell(20, 8, str(row["Qty"]), 1)
-            pdf.cell(30, 8, str(row["Rate (AWG)"]), 1)
-            pdf.cell(30, 8, f"{row['Total']:.2f}", 1)
+            # PDF Generation
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(200, 10, "INVOICE", ln=True, align="C")
+            pdf.set_font("Arial", size=10)
+            pdf.cell(100, 8, "Taz-IT Solutions", ln=1)
+            pdf.cell(100, 8, f"Client: {client_name}", ln=1)
+            pdf.cell(100, 8, f"Date: {invoice_date}", ln=1)
+            pdf.cell(100, 8, f"Due: {due_date}", ln=1)
+            pdf.ln(5)
+            pdf.set_font("Arial", "B", 10)
+            pdf.cell(60, 8, "Description", 1)
+            pdf.cell(20, 8, "Units", 1)
+            pdf.cell(20, 8, "Qty", 1)
+            pdf.cell(30, 8, "Rate", 1)
+            pdf.cell(30, 8, "Total", 1)
             pdf.ln()
-        pdf.ln(5)
-        pdf.cell(130)
-        pdf.cell(30, 8, "Subtotal", 1)
-        pdf.cell(30, 8, f"{subtotal:.2f} AWG", 1, ln=1)
-        pdf.cell(130)
-        pdf.cell(30, 8, f"Tax ({tax_rate:.0f}%)", 1)
-        pdf.cell(30, 8, f"{tax:.2f} AWG", 1, ln=1)
-        pdf.cell(130)
-        pdf.cell(30, 8, "Total", 1)
-        pdf.cell(30, 8, f"{total:.2f} AWG", 1, ln=1)
+            pdf.set_font("Arial", size=10)
+            for _, row in valid_df.iterrows():
+                pdf.cell(60, 8, str(row["Description"]), 1)
+                pdf.cell(20, 8, str(row["Units"]), 1)
+                pdf.cell(20, 8, str(row["Qty"]), 1)
+                pdf.cell(30, 8, str(row["Rate (AWG)"]), 1)
+                pdf.cell(30, 8, f"{row['Total']:.2f}", 1)
+                pdf.ln()
+            pdf.ln(5)
+            pdf.cell(130)
+            pdf.cell(30, 8, "Subtotal", 1)
+            pdf.cell(30, 8, f"{subtotal:.2f} AWG", 1, ln=1)
+            pdf.cell(130)
+            pdf.cell(30, 8, f"Tax ({tax_rate:.0f}%)", 1)
+            pdf.cell(30, 8, f"{tax:.2f} AWG", 1, ln=1)
+            pdf.cell(130)
+            pdf.cell(30, 8, "Total", 1)
+            pdf.cell(30, 8, f"{total:.2f} AWG", 1, ln=1)
 
-        filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            pdf.output(tmp.name)
-            media = MediaFileUpload(tmp.name, mimetype="application/pdf")
-            drive_service = build("drive", "v3", credentials=creds)
-            file_metadata = {"name": filename, "parents": [PARENT_FOLDER_ID]}
-            file = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-            file_id = file.get("id")
+            filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                pdf.output(tmp.name)
 
-        # Log to Sheet
-        sheet_service = build("sheets", "v4", credentials=creds)
-        ensure_invoices_sheet_exists(sheet_service, SPREADSHEET_ID)
-        sheet_service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range="Invoices!A2",
-            valueInputOption="USER_ENTERED",
-            body={"values": [[str(invoice_date), invoice_number, client_name, f"{total:.2f}", tax_rate, f"https://drive.google.com/file/d/{file_id}/view", status]]}
-        ).execute()
+                drive_service = build("drive", "v3", credentials=creds)
+                media = MediaFileUpload(tmp.name, mimetype="application/pdf")
 
-        st.success("Invoice uploaded and logged successfully!")
+                file_metadata = {"name": filename}
+                if PARENT_FOLDER_ID:
+                    file_metadata["parents"] = [PARENT_FOLDER_ID]
+
+                uploaded_file = drive_service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id"
+                ).execute()
+                file_id = uploaded_file.get("id")
+
+            # Log to Sheet
+            sheet_service = build("sheets", "v4", credentials=creds)
+            ensure_invoices_sheet_exists(sheet_service, SPREADSHEET_ID)
+            sheet_service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range="Invoices!A2",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[str(invoice_date), invoice_number, client_name, f"{total:.2f}", tax_rate, f"https://drive.google.com/file/d/{file_id}/view", status]]}
+            ).execute()
+
+            st.success("Invoice uploaded and logged successfully!")
+            st.markdown(f"[View Invoice PDF](https://drive.google.com/file/d/{file_id}/view)", unsafe_allow_html=True)
+
+        except Exception as e:
+            st.error(f"❌ Upload or logging failed: {e}")
