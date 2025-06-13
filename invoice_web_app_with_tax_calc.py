@@ -1,4 +1,37 @@
 
+def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
+    # Check if 'Invoices' tab exists, create if not
+    sheets_metadata = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_titles = [s["properties"]["title"] for s in sheets_metadata["sheets"]]
+
+    if "Invoices" not in sheet_titles:
+        requests = [{
+            "addSheet": {
+                "properties": {
+                    "title": "Invoices",
+                    "gridProperties": {
+                        "rowCount": 1000,
+                        "columnCount": 6
+                    }
+                }
+            }
+        }]
+        sheet_service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests}
+        ).execute()
+
+        # Add headers
+        headers = [["Date", "Invoice #", "Client Name", "Amount (AWG)", "Tax Rate", "Drive File Link"]]
+        sheet_service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range="Invoices!A1:F1",
+            valueInputOption="RAW",
+            body={"values": headers}
+        ).execute()
+
+
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -142,6 +175,7 @@ def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, ta
     sheet_service = build("sheets", "v4", credentials=creds)
 
     spreadsheet_id = create_sheet_if_not_exists(creds)
+    ensure_invoices_sheet_exists(sheet_service, spreadsheet_id)
     sheet_range = "Invoices!A:F"
     values = [[
         invoice_date.strftime("%Y-%m-%d"),
