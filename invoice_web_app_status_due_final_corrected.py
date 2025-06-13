@@ -1,3 +1,29 @@
+import streamlit as st
+
+try:
+    st.write("App is starting...")
+
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    import pandas as pd
+    from fpdf import FPDF
+    from datetime import date
+    from io import BytesIO
+    import os
+    import tempfile
+
+    st.write("Libraries loaded.")
+
+    GOOGLE_SERVICE_ACCOUNT = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
+    SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
+    st.write("Secrets loaded.")
+
+    # continue setup...
+
+except Exception as e:
+    st.error(f"Startup failed: {e}")
+
 # invoice_web_app.py
 import streamlit as st
 import pandas as pd
