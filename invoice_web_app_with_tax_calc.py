@@ -14,23 +14,17 @@ from googleapiclient.http import MediaIoBaseUpload
 st.set_page_config(page_title="Taz-IT Invoice Generator", layout="centered")
 st.title("📄 Taz-IT Invoice Generator")
 
-# Invoice Meta
-st.subheader("Invoice Details")
 invoice_number = st.text_input("Invoice Number", value="1001")
 invoice_date = st.date_input("Invoice Date", value=datetime.today())
 
-# Client Info
-st.subheader("Client Information")
 client_name = st.text_input("Client Name", value="Bon Vibe")
 client_address = st.text_input("Client Address", value="Kerkstraat 4, Aruba")
 client_phone = st.text_input("Client Phone", value="297 746 3522")
 
-# Tax Rate
 st.subheader("Tax Settings")
 tax_rate_percent = st.number_input("Tax rate (%)", min_value=0.0, max_value=100.0, value=12.0, step=0.1)
 tax_rate = tax_rate_percent / 100
 
-# Optional: Reverse calculator
 st.markdown("### 🎯 Reverse Tax Calculator")
 target_total = st.number_input("Enter total incl. tax (optional)", min_value=0.0, format="%.2f")
 suggested_rate = None
@@ -40,7 +34,6 @@ if target_total:
     st.write(f"Subtotal: **{base:.2f} AWG**, Tax: **{tax:.2f} AWG**")
     suggested_rate = round(base, 2)
 
-# Line Items
 st.subheader("Line Items")
 default_data = pd.DataFrame([{"Description": "License services", "Units": 1, "Qty": 1, "Rate (AWG)": suggested_rate if suggested_rate else 0.0}])
 item_df = st.data_editor(default_data, num_rows="dynamic", use_container_width=True)
@@ -53,9 +46,9 @@ def generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address
 
     logo_path = "tazit_logo_pdf.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=10, y=8, w=30)
-        pdf.set_y(12)
+        pdf.image(logo_path, x=160, y=10, w=30)
 
+    pdf.set_y(45)
     pdf.set_font("Arial", "B", 16)
     pdf.cell(200, 10, "INVOICE", ln=True, align="R")
 
@@ -139,7 +132,7 @@ if st.button("Generate & Upload Invoice"):
     if valid_df.empty:
         st.warning("Please enter at least one line item.")
     else:
-        filename = f"Invoice_{invoice_number}.pdf"
+        filename = f"TazITSolutions_Invoice_{invoice_number}.pdf"
         pdf_bytes = generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address, client_phone, valid_df, tax_rate)
         file_id = upload_to_drive(filename, pdf_bytes)
         st.success(f"✅ Invoice uploaded to Google Drive (File ID: {file_id})")
