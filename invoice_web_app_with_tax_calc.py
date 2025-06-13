@@ -174,7 +174,7 @@ def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, ta
     from googleapiclient.discovery import build
     sheet_service = build("sheets", "v4", credentials=creds)
 
-    spreadsheet_id = create_sheet_if_not_exists(creds)
+    spreadsheet_id = "1vBUF05rh5sF0IfoIYryJfJLqWXleAehlqXKT1pXFUHs"
     ensure_invoices_sheet_exists(sheet_service, spreadsheet_id)
     sheet_range = "Invoices!A:F"
     values = [[
@@ -191,7 +191,28 @@ def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, ta
         valueInputOption="USER_ENTERED", body=body).execute()
 
 # BEGIN: Fixed create_sheet_if_not_exists
+# BEGIN: Updated for stability
+# create_sheet_if_not_exists removed (replaced by static ID)
 def create_sheet_if_not_exists(creds):
+    return "1vBUF05rh5sF0IfoIYryJfJLqWXleAehlqXKT1pXFUHs"
+    import time
+    drive = build("drive", "v3", credentials=creds)
+
+    # Delete broken versions if needed (manual step)
+    query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
+    result = drive.files().list(q=query, fields="files(id)").execute()
+    if result["files"]:
+        return result["files"][0]["id"]
+
+    # Create fresh Google Sheet
+    file_metadata = {
+        "name": "Invoice_Log",
+        "mimeType": "application/vnd.google-apps.spreadsheet"
+    }
+    file = drive.files().create(body=file_metadata, fields="id").execute()
+    time.sleep(2)  # allow time to fully provision sheet
+    return file.get("id")
+# END
     drive = build("drive", "v3", credentials=creds)
 
     # Search for the sheet in Drive
