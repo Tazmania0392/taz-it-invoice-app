@@ -237,32 +237,32 @@ def create_sheet_if_not_exists(creds):
     return file.get("id")
 
 if st.button("Generate & Upload Invoice"):
-        status = st.selectbox("Invoice Status", ["Unpaid", "Paid"], index=0)
+    status = st.selectbox("Invoice Status", ["Unpaid", "Paid"], index=0)
     due_date = st.date_input("Payment Due Date")
     today = datetime.today().date()
     late = today > due_date and status == "Unpaid"
     status = "Late" if late else status
-            valid_df = item_df.dropna(subset=["Description"])
+    valid_df = item_df.dropna(subset=["Description"])
     if valid_df.empty:
     st.warning("Please enter at least one line item.")
     else:
     filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
     drive_service, creds = get_drive_service()
-        # Main folder
+    # Main folder
     parent_folder = create_folder_if_not_exists(drive_service, "Invoices")
     client_folder = create_folder_if_not_exists(drive_service, client_name.replace(" ", ""), parent=parent_folder)
-        pdf_bytes, subtotal, tax, total = generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address, client_phone, valid_df, tax_rate)
-        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf")
+    pdf_bytes, subtotal, tax, total = generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address, client_phone, valid_df, tax_rate)
+    media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf")
     file_metadata = {"name": filename, "parents": [client_folder]}
     file = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
     file_id = file["id"]
-        log_to_sheet(creds, invoice_number, invoice_date, client_name, total, tax_rate, file_id)
-        st.success(f"✅ Invoice uploaded to Google Drive and logged (File ID: {file_id})")
-        st.subheader("🔍 PDF Preview")
+    log_to_sheet(creds, invoice_number, invoice_date, client_name, total, tax_rate, file_id)
+    st.success(f"✅ Invoice uploaded to Google Drive and logged (File ID: {file_id})")
+    st.subheader("🔍 PDF Preview")
     base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
     st.markdown(f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600px"></iframe>', unsafe_allow_html=True)
     st.download_button("📄 Download PDF", data=pdf_bytes, file_name=filename, mime="application/pdf")
-            st.subheader("📤 Export Invoice Log (Admin)")
+    st.subheader("📤 Export Invoice Log (Admin)")
         if st.button("Download Invoice Log as Excel"):
     import gspread
     import pandas as pd
@@ -298,12 +298,12 @@ if st.button("Generate & Upload Invoice"):
     pdf.output("/tmp/invoice_log_export.pdf")
     with open("/tmp/invoice_log_export.pdf", "rb") as f:
     st.download_button("📥 Download PDF", f.read(), file_name="invoice_log.pdf")
-            st.subheader("📋 Outstanding Invoices")
+    st.subheader("📋 Outstanding Invoices")
     import gspread
     from gspread_dataframe import get_as_dataframe
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(spreadsheet_id)
     worksheet = sh.worksheet("Invoices")
     df = get_as_dataframe(worksheet, evaluate_formulas=True).dropna(how="all")
-        filtered = df[df["Status"].isin(["Unpaid", "Late"])]
+    filtered = df[df["Status"].isin(["Unpaid", "Late"])]
     st.dataframe(filtered)
