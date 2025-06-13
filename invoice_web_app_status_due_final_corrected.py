@@ -86,6 +86,7 @@ return build("drive", "v3", credentials=creds), creds
     results = service.files().list(q=query, spaces='drive', fields="files(id, name)").execute()
     items = results.get("files", [])
     if items:
+    pass  # Auto-inserted to fix missing block
 return items[0]["id"]
     file_metadata = {
     "name": name,
@@ -200,6 +201,7 @@ import time
     query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
     result = drive.files().list(q=query, fields="files(id)").execute()
     if result["files"]:
+    pass  # Auto-inserted to fix missing block
 return result["files"][0]["id"]
 
     # Create fresh Google Sheet
@@ -217,6 +219,7 @@ return file.get("id")
     query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
     result = drive.files().list(q=query, fields="files(id)").execute()
     if result["files"]:
+    pass  # Auto-inserted to fix missing block
 return result["files"][0]["id"]
 
     # If not found, create new Google Sheet
@@ -231,6 +234,7 @@ return file.get("id")
     query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
     result = drive.files().list(q=query, fields="files(id)").execute()
     if result["files"]:
+    pass  # Auto-inserted to fix missing block
 return result["files"][0]["id"]
     file_metadata = {"name": "Invoice_Log", "mimeType": "application/vnd.google-apps.spreadsheet", "parents": ["1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"]}
     file = drive.files().create(body=file_metadata, fields="id").execute()
@@ -266,6 +270,7 @@ return file.get("id")
     st.download_button("📄 Download PDF", data=pdf_bytes, file_name=filename, mime="application/pdf")
     st.subheader("📤 Export Invoice Log (Admin)")
     if st.button("Download Invoice Log as Excel"):
+    pass  # Auto-inserted to fix missing block
 import gspread
 import pandas as pd
 from gspread_dataframe import get_as_dataframe
@@ -277,6 +282,7 @@ from gspread_dataframe import get_as_dataframe
     with open("/tmp/invoice_log_export.xlsx", "rb") as f:
     st.download_button("📥 Download Excel", f.read(), file_name="invoice_log.xlsx")
     if st.button("Download Invoice Log as PDF"):
+    pass  # Auto-inserted to fix missing block
 import gspread
 from fpdf import FPDF
 import pandas as pd
