@@ -38,7 +38,30 @@ st.subheader("Line Items")
 default_data = pd.DataFrame([{"Description": "License services", "Units": 1, "Qty": 1, "Rate (AWG)": suggested_rate if suggested_rate else 0.0}])
 item_df = st.data_editor(default_data, num_rows="dynamic", use_container_width=True)
 
-FOLDER_ID = "1GwKcp0mPEo-PlBHiHthxblTMmMoCUxQo"
+def get_drive_service():
+    creds_dict = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
+    creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=[
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/spreadsheets"
+    ])
+    return build("drive", "v3", credentials=creds), creds
+
+def create_folder_if_not_exists(service, name, parent=None):
+    query = f"name='{name}' and mimeType='application/vnd.google-apps.folder'"
+    if parent:
+        query += f" and '{parent}' in parents"
+    results = service.files().list(q=query, spaces='drive', fields="files(id, name)").execute()
+    items = results.get("files", [])
+    if items:
+        return items[0]["id"]
+    file_metadata = {
+        "name": name,
+        "mimeType": "application/vnd.google-apps.folder"
+    }
+    if parent:
+        file_metadata["parents"] = [parent]
+    file = service.files().create(body=file_metadata, fields="id").execute()
+    return file.get("id")
 
 def generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address, client_phone, df, tax_rate):
     pdf = FPDF()
@@ -50,7 +73,7 @@ def generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address
 
     pdf.set_y(45)
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, "INVOICE", ln=True, align="R")
+    pdf.cell(200, 10, "INVOICE", ln=True, align="C")
 
     pdf.set_font("Arial", "", 10)
     pdf.cell(100, 8, "Taz-IT Solutions", ln=True)
@@ -112,19 +135,35 @@ def generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address
     pdf.cell(0, 5, "SWIFT/BIC: ARUBAWAW", ln=True)
     pdf.cell(0, 5, "Currency: AWG", ln=True)
 
-    return pdf.output(dest="S").encode("latin-1")
+    return pdf.output(dest="S").encode("latin-1"), subtotal, tax, subtotal + tax
 
-def upload_to_drive(filename, file_bytes):
-    creds_dict = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
-    creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/drive"])
-    drive_service = build("drive", "v3", credentials=creds)
+def log_to_sheet(creds, invoice_number, invoice_date, client_name, total_awg, tax_rate, drive_file_id):
+    from googleapiclient.discovery import build
+    sheet_service = build("sheets", "v4", credentials=creds)
 
-    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype="application/pdf")
-    file_metadata = {
-        "name": filename,
-        "parents": [FOLDER_ID]
-    }
-    file = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+    spreadsheet_id = create_sheet_if_not_exists(creds)
+    sheet_range = "Invoices!A:F"
+    values = [[
+        invoice_date.strftime("%Y-%m-%d"),
+        invoice_number,
+        client_name,
+        f"{total_awg:.2f}",
+        f"{int(tax_rate * 100)}%",
+        f"https://drive.google.com/file/d/{drive_file_id}"
+    ]]
+    body = {"values": values}
+    sheet_service.spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id, range=sheet_range,
+        valueInputOption="USER_ENTERED", body=body).execute()
+
+def create_sheet_if_not_exists(creds):
+    drive = build("drive", "v3", credentials=creds)
+    query = "name='Invoice_Log' and mimeType='application/vnd.google-apps.spreadsheet'"
+    result = drive.files().list(q=query, fields="files(id)").execute()
+    if result["files"]:
+        return result["files"][0]["id"]
+    file_metadata = {"name": "Invoice_Log", "mimeType": "application/vnd.google-apps.spreadsheet"}
+    file = drive.files().create(body=file_metadata, fields="id").execute()
     return file.get("id")
 
 if st.button("Generate & Upload Invoice"):
@@ -132,10 +171,23 @@ if st.button("Generate & Upload Invoice"):
     if valid_df.empty:
         st.warning("Please enter at least one line item.")
     else:
-        filename = f"TazITSolutions_Invoice_{invoice_number}.pdf"
-        pdf_bytes = generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address, client_phone, valid_df, tax_rate)
-        file_id = upload_to_drive(filename, pdf_bytes)
-        st.success(f"✅ Invoice uploaded to Google Drive (File ID: {file_id})")
+        filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
+        drive_service, creds = get_drive_service()
+
+        # Main folder
+        parent_folder = create_folder_if_not_exists(drive_service, "Invoices")
+        client_folder = create_folder_if_not_exists(drive_service, client_name.replace(" ", ""), parent=parent_folder)
+
+        pdf_bytes, subtotal, tax, total = generate_pdf_bytes(invoice_number, invoice_date, client_name, client_address, client_phone, valid_df, tax_rate)
+
+        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf")
+        file_metadata = {"name": filename, "parents": [client_folder]}
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+        file_id = file["id"]
+
+        log_to_sheet(creds, invoice_number, invoice_date, client_name, total, tax_rate, file_id)
+
+        st.success(f"✅ Invoice uploaded to Google Drive and logged (File ID: {file_id})")
 
         st.subheader("🔍 PDF Preview")
         base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
