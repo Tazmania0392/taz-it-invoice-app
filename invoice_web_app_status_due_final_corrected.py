@@ -6,15 +6,6 @@ def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
 
     if "Invoices" not in sheet_titles:
     requests = [{
-    "addSheet": {
-    "properties": {
-    "title": "Invoices",
-    "gridProperties": {
-    "rowCount": 1000,
-    "columnCount": 6
-    }
-    }
-    }
     }]
     sheet_service.spreadsheets().batchUpdate(
     spreadsheetId=spreadsheet_id,
