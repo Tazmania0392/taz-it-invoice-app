@@ -60,7 +60,7 @@ def generate_pdf(df):
     pdf.add_page()
 
     # Logo
-    pdf.image("logo.png", 150, 10, 40)
+    pdf.image("tazit_logo_pdf.png", 150, 10, 40)
 
     pdf.set_font("Arial", "B", 16)
     pdf.cell(200, 10, "INVOICE", ln=True, align="C")
