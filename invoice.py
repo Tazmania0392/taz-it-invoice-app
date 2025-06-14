@@ -18,7 +18,7 @@ creds = service_account.Credentials.from_service_account_info(
 
 # Google Drive and Sheet config
 SPREADSHEET_ID = "your-google-sheet-id"
-PARENT_FOLDER_ID = "your-drive-folder-id"  # Leave blank or None to test without upload to folder
+PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]  # Leave blank or None to test without upload to folder
 
 def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
     try:
