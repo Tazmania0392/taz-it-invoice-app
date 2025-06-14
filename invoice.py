@@ -1,3 +1,4 @@
+# --- Imports ---
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -8,7 +9,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# Load credentials
+# --- Google API Setup ---
 service_info = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
 creds = service_account.Credentials.from_service_account_info(
     service_info,
@@ -18,6 +19,7 @@ creds = service_account.Credentials.from_service_account_info(
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]
 
+# --- Helpers ---
 def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
     try:
         meta = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
@@ -51,6 +53,7 @@ def get_next_invoice_number(sheet_service, spreadsheet_id):
     except:
         return "1001"
 
+# --- PDF Layout ---
 class InvoicePDF(FPDF):
     def header(self):
         self.image("tazit_logo_pdf.png", x=10, y=10, w=30)
@@ -131,7 +134,7 @@ class InvoicePDF(FPDF):
         ]:
             self.cell(0, 6, line, ln=1)
 
-# UI
+# --- Streamlit UI ---
 st.title("🧾 Taz-IT Invoice Generator")
 
 client_name = st.text_input("Client Name")
@@ -188,7 +191,36 @@ if st.button("Generate & Upload Invoice"):
                 pdf.output(tmp.name)
 
                 drive_service = build("drive", "v3", credentials=creds)
+                media = MediaFileUpload(tmp.name, mim
                 media = MediaFileUpload(tmp.name, mimetype="application/pdf")
                 file_metadata = {"name": filename}
                 if PARENT_FOLDER_ID:
-                    file_metadata["
+                    file_metadata["parents"] = [PARENT_FOLDER_ID]
+
+                uploaded_file = drive_service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id"
+                ).execute()
+                file_id = uploaded_file.get("id")
+
+            sheet_service.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range="Invoices!A2",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[
+                    str(invoice_date),
+                    invoice_number,
+                    client_name,
+                    f"{total:.2f}",
+                    tax_rate,
+                    f"https://drive.google.com/file/d/{file_id}/view",
+                    status
+                ]]}
+            ).execute()
+
+            st.success("✅ Invoice uploaded and logged successfully!")
+            st.markdown(f"📄 View Invoice PDF", unsafe_allow_html=True)
+
+        except Exception as e:
+            st.error(f"❌ Upload or logging failed: {e}")
