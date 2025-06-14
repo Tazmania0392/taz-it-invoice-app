@@ -110,7 +110,7 @@ class InvoicePDF(FPDF):
     self.cell(30, 8, "Total", 1)
     self.cell(30, 8, f"{total:.2f} AWG", 1, ln=1)
 
-def footer_section(self):
+    def footer_section(self):
     self.set_y(-45)  # reduced from -65
     self.set_font("Arial", "I", 10)
     self.cell(0, 6, "Thank you for your business!", ln=1)
