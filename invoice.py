@@ -58,13 +58,15 @@ class InvoicePDF(FPDF):
         self.set_margins(10, 10, 10)
 
     def header(self):
-        self.set_font("Arial", "B", 16)
+        self.set_font("Helvetica", "B", 16)
         self.set_xy(0, 12)
         self.cell(0, 10, "INVOICE", ln=True, align="C")
+        self.set_line_width(0.5)
+        self.line(10, 22, 200, 22)
         self.image("tazit_logo_pdf.png", x=165, y=10, w=35)
 
     def company_info(self):
-        self.set_font("Arial", "", 10)
+        self.set_font("Helvetica", "", 10)
         self.set_xy(10, 25)
         for line in [
             "Taz-IT Solutions", "Pos Chikito 99B", "Oranjestad, Aruba",
@@ -74,7 +76,7 @@ class InvoicePDF(FPDF):
 
     def client_info(self, name, address, phone, invoice_number, invoice_date):
         self.set_y(50)
-        self.set_font("Arial", "", 10)
+        self.set_font("Helvetica", "", 10)
         self.set_x(10)
         self.cell(100, 6, f"Bill To: {name}", ln=0)
         self.set_x(130)
@@ -90,57 +92,63 @@ class InvoicePDF(FPDF):
 
     def line_items_table(self, items):
         self.ln(5)
-        self.set_fill_color(230, 230, 230)
-        self.set_font("Arial", "B", 10)
+        self.set_fill_color(200, 50, 50)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 10)
         col_widths = [60, 20, 20, 30, 30]
         headers = ["Description", "Units", "Qty", "Rate", "Total"]
         for h, w in zip(headers, col_widths):
             self.cell(w, 6, h, 1, 0, 'C', True)
         self.ln()
-        self.set_font("Arial", "", 10)
-        for row in items:
-            self.cell(col_widths[0], 6, row["desc"], 1)
-            self.cell(col_widths[1], 6, str(row["units"]), 1, 0, 'C')
-            self.cell(col_widths[2], 6, str(row["qty"]), 1, 0, 'C')
-            self.cell(col_widths[3], 6, f"{row['rate']:.2f}", 1, 0, 'R')
-            self.cell(col_widths[4], 6, f"{row['total']:.2f}", 1, 0, 'R')
+
+        self.set_font("Helvetica", "", 10)
+        self.set_text_color(0, 0, 0)
+        fill = False
+        for i, row in enumerate(items):
+            if i % 2 == 1:
+                self.set_fill_color(245, 245, 245)
+                fill = True
+            else:
+                fill = False
+            self.cell(col_widths[0], 6, row["desc"], 1, 0, 'L', fill)
+            self.cell(col_widths[1], 6, str(row["units"]), 1, 0, 'C', fill)
+            self.cell(col_widths[2], 6, str(row["qty"]), 1, 0, 'C', fill)
+            self.cell(col_widths[3], 6, f"{row['rate']:.2f}", 1, 0, 'R', fill)
+            self.cell(col_widths[4], 6, f"{row['total']:.2f}", 1, 0, 'R', fill)
             self.ln()
 
     def totals_table(self, subtotal, tax, tax_rate, total):
         self.ln(4)
-        self.set_font("Arial", "", 10)
-
-        label_x = 110  # Aligns with Rate column
-        value_x = 140  # Aligns with Total column
+        self.set_font("Helvetica", "", 10)
+        label_x = 110
+        value_x = 140
         row_height = 6
         col_width = 30
 
-        # Subtotal
         self.set_x(label_x)
         self.cell(col_width, row_height, "Subtotal", border=1)
         self.set_x(value_x)
         self.cell(col_width, row_height, f"{subtotal:.2f} AWG", border=1, ln=1, align='R')
 
-        # Tax
         self.set_x(label_x)
         self.cell(col_width, row_height, f"Tax ({tax_rate:.0f}%)", border=1)
         self.set_x(value_x)
         self.cell(col_width, row_height, f"{tax:.2f} AWG", border=1, ln=1, align='R')
 
-        # Total
-        self.set_font("Arial", "B", 10)
+        self.set_font("Helvetica", "B", 10)
+        self.set_fill_color(230, 230, 230)
         self.set_x(label_x)
-        self.cell(col_width, row_height, "Total", border=1)
+        self.cell(col_width, row_height, "Total", border=1, fill=True)
         self.set_x(value_x)
-        self.cell(col_width, row_height, f"{total:.2f} AWG", border=1, ln=1, align='R')
+        self.cell(col_width, row_height, f"{total:.2f} AWG", border=1, ln=1, align='R', fill=True)
 
     def footer_section(self):
         self.ln(6)
-        self.set_font("Arial", "I", 10)
+        self.set_font("Helvetica", "I", 10)
         self.cell(0, 5, "Thank you for your business!", ln=1)
         self.cell(0, 5, "Payment due within 14 days.", ln=1)
         self.ln(3)
-        self.set_font("Arial", "", 10)
+        self.set_font("Helvetica", "", 10)
         for line in [
             "Bank Payment Info:",
             "Bank: Aruba Bank",
@@ -152,7 +160,7 @@ class InvoicePDF(FPDF):
             self.cell(0, 5, line, ln=1)
 
 # Streamlit UI
-st.title("🧾 Taz-IT Invoice Generator")
+st.title("🗋e Taz-IT Invoice Generator")
 
 client_name = st.text_input("Client Name")
 client_address = st.text_area("Client Address")
