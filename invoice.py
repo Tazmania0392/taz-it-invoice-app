@@ -85,38 +85,40 @@ class InvoicePDF(FPDF):
         self.set_fill_color(200, 0, 0)
         self.set_text_color(255)
         self.set_font("Arial", "B", 10)
-        self.cell(60, 8, "Description", 1, 0, 'C', True)
-        self.cell(20, 8, "Units", 1, 0, 'C', True)
-        self.cell(20, 8, "Qty", 1, 0, 'C', True)
-        self.cell(30, 8, "Rate", 1, 0, 'C', True)
-        self.cell(30, 8, "Total", 1, 1, 'C', True)
+        col_widths = [60, 20, 20, 30, 30]
+        headers = ["Description", "Units", "Qty", "Rate", "Total"]
+        for h, w in zip(headers, col_widths):
+            self.cell(w, 8, h, 1, 0, 'C', True)
+        self.ln()
         self.set_font("Arial", "", 10)
         self.set_text_color(0)
         for row in items:
-            self.cell(60, 8, row["desc"], 1)
-            self.cell(20, 8, str(row["units"]), 1)
-            self.cell(20, 8, str(row["qty"]), 1)
-            self.cell(30, 8, f"{row['rate']:.2f}", 1)
-            self.cell(30, 8, f"{row['total']:.2f}", 1, 1)
+            self.cell(col_widths[0], 8, row["desc"], 1)
+            self.cell(col_widths[1], 8, str(row["units"]), 1)
+            self.cell(col_widths[2], 8, str(row["qty"]), 1)
+            self.cell(col_widths[3], 8, f"{row['rate']:.2f}", 1)
+            self.cell(col_widths[4], 8, f"{row['total']:.2f}", 1)
+            self.ln()
 
     def totals_table(self, subtotal, tax, tax_rate, total):
-        self.ln(3)
-        self.set_x(140)
+        self.ln(2)
+        right_x = 140
+        self.set_x(right_x)
         self.cell(30, 8, "Subtotal", 1)
         self.cell(30, 8, f"{subtotal:.2f} AWG", 1, ln=1)
-        self.set_x(140)
+        self.set_x(right_x)
         self.cell(30, 8, f"Tax ({tax_rate:.0f}%)", 1)
         self.cell(30, 8, f"{tax:.2f} AWG", 1, ln=1)
-        self.set_x(140)
+        self.set_x(right_x)
         self.cell(30, 8, "Total", 1)
         self.cell(30, 8, f"{total:.2f} AWG", 1, ln=1)
 
     def footer_section(self):
-        self.set_y(-45)
+        self.set_y(250)
         self.set_font("Arial", "I", 10)
         self.cell(0, 6, "Thank you for your business!", ln=1)
         self.cell(0, 6, "Payment due within 14 days.", ln=1)
-        self.ln(5)
+        self.ln(4)
         self.set_font("Arial", "", 10)
         for line in [
             "Bank Payment Info:",
