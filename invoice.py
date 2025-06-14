@@ -18,7 +18,6 @@ creds = service_account.Credentials.from_service_account_info(
     ]
 )
 
-# Secrets
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]
 
@@ -71,7 +70,7 @@ status = st.selectbox("Invoice Status", ["Unpaid", "Paid"])
 if datetime.today().date() > due_date and status == "Unpaid":
     status = "Late"
 
-# Custom PDF Class
+# PDF Class
 class InvoicePDF(FPDF):
     def header(self):
         self.image("tazit_logo_pdf.png", x=165, y=10, w=35)
@@ -88,12 +87,19 @@ class InvoicePDF(FPDF):
     def client_info(self, name, address, phone, invoice_number, invoice_date):
         self.set_y(50)
         self.set_font("Arial", "", 10)
-        self.cell(100, 6, f"Bill To: {name}", ln=1)
-        self.cell(100, 6, address, ln=1)
+
+        self.set_x(10)
+        self.cell(100, 6, f"Bill To: {name}", ln=0)
+        self.set_x(130)
+        self.cell(60, 6, f"Invoice #: {invoice_number}", ln=1)
+
+        self.set_x(10)
+        self.cell(100, 6, address, ln=0)
+        self.set_x(130)
+        self.cell(60, 6, f"Date: {invoice_date.strftime('%d-%b-%Y')}", ln=1)
+
+        self.set_x(10)
         self.cell(100, 6, phone, ln=1)
-        self.ln(2)
-        self.cell(100, 6, f"Invoice #: {invoice_number}", ln=0)
-        self.cell(100, 6, f"Date: {invoice_date.strftime('%d-%b-%Y')}", ln=1)
 
     def line_items_table(self, items):
         self.set_fill_color(200, 0, 0)
@@ -139,7 +145,7 @@ class InvoicePDF(FPDF):
         self.cell(0, 6, "SWIFT/BIC: ARUBAWAW", ln=1)
         self.cell(0, 6, "Currency: AWG", ln=1)
 
-# Button action
+# Main button action
 if st.button("Generate & Upload Invoice"):
     valid_df = item_df.dropna(subset=["Description"])
     if valid_df.empty:
@@ -151,7 +157,6 @@ if st.button("Generate & Upload Invoice"):
             tax = subtotal * (tax_rate / 100)
             total = subtotal + tax
 
-            # Generate PDF
             pdf = InvoicePDF()
             pdf.add_page()
             pdf.company_info()
@@ -171,7 +176,7 @@ if st.button("Generate & Upload Invoice"):
             pdf.totals_table(subtotal, tax, tax_rate, total)
             pdf.footer_section()
 
-            filename = f"Invoice_{invoice_number}_{client_name.replace(' ', '')}.pdf"
+            filename = f"invoice_{invoice_number}_{client_name.title().replace(' ', '')}.pdf"
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 pdf.output(tmp.name)
 
