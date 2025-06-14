@@ -99,33 +99,34 @@ class InvoicePDF(FPDF):
             self.cell(30, 8, f"{row['total']:.2f}", 1, 1)
 
     def totals_table(self, subtotal, tax, tax_rate, total):
-        self.ln(3)
-        self.cell(130)
-        self.cell(30, 8, "Subtotal", 1)
-        self.cell(30, 8, f"{subtotal:.2f} AWG", 1, ln=1)
-        self.cell(130)
-        self.cell(30, 8, f"Tax ({tax_rate:.0f}%)", 1)
-        self.cell(30, 8, f"{tax:.2f} AWG", 1, ln=1)
-        self.cell(130)
-        self.cell(30, 8, "Total", 1)
-        self.cell(30, 8, f"{total:.2f} AWG", 1, ln=1)
+    self.ln(3)
+    self.set_x(140)
+    self.cell(30, 8, "Subtotal", 1)
+    self.cell(30, 8, f"{subtotal:.2f} AWG", 1, ln=1)
+    self.set_x(140)
+    self.cell(30, 8, f"Tax ({tax_rate:.0f}%)", 1)
+    self.cell(30, 8, f"{tax:.2f} AWG", 1, ln=1)
+    self.set_x(140)
+    self.cell(30, 8, "Total", 1)
+    self.cell(30, 8, f"{total:.2f} AWG", 1, ln=1)
 
-    def footer_section(self):
-        self.set_y(-65)
-        self.set_font("Arial", "I", 10)
-        self.cell(0, 6, "Thank you for your business!", ln=1)
-        self.cell(0, 6, "Payment due within 14 days.", ln=1)
-        self.ln(5)
-        self.set_font("Arial", "", 10)
-        for line in [
-            "Bank Payment Info:",
-            "Bank: Aruba Bank",
-            "Account Name: Joshua Croes",
-            "Account Number: 3066850190",
-            "SWIFT/BIC: ARUBAWAW",
-            "Currency: AWG"
-        ]:
-            self.cell(0, 6, line, ln=1)
+def footer_section(self):
+    self.set_y(-45)  # reduced from -65
+    self.set_font("Arial", "I", 10)
+    self.cell(0, 6, "Thank you for your business!", ln=1)
+    self.cell(0, 6, "Payment due within 14 days.", ln=1)
+    self.ln(5)
+    self.set_font("Arial", "", 10)
+    for line in [
+        "Bank Payment Info:",
+        "Bank: Aruba Bank",
+        "Account Name: Joshua Croes",
+        "Account Number: 3066850190",
+        "SWIFT/BIC: ARUBAWAW",
+        "Currency: AWG"
+    ]:
+        self.cell(0, 6, line, ln=1)
+
 
 # --- UI ---
 st.title("🧾 Taz-IT Invoice Generator")
