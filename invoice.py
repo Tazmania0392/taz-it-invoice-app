@@ -58,11 +58,10 @@ class InvoicePDF(FPDF):
         self.set_margins(10, 10, 10)
 
     def header(self):
-        self.image("tazit_logo_pdf.png", x=10, y=10, w=30)
         self.set_font("Arial", "B", 16)
         self.set_xy(0, 12)
         self.cell(0, 10, "INVOICE", ln=True, align="C")
-        self.ln(1)
+        self.image("tazit_logo_pdf.png", x=165, y=10, w=35)  # Top-right logo
 
     def company_info(self):
         self.set_font("Arial", "", 10)
@@ -110,18 +109,26 @@ class InvoicePDF(FPDF):
     def totals_table(self, subtotal, tax, tax_rate, total):
         self.ln(4)
         self.set_font("Arial", "", 10)
-        self.set_x(120)
-        self.cell(40, 6, "Subtotal", 1)
-        self.cell(30, 6, f"{subtotal:.2f} AWG", 1, ln=1, align='R')
+        label_x = 120  # aligns with Rate
+        value_x = 150  # aligns with Total
+        row_height = 6
+        col_width = 30
 
-        self.set_x(120)
-        self.cell(40, 6, f"Tax ({tax_rate:.0f}%)", 1)
-        self.cell(30, 6, f"{tax:.2f} AWG", 1, ln=1, align='R')
+        self.set_x(label_x)
+        self.cell(col_width, row_height, "Subtotal", 1)
+        self.set_x(value_x)
+        self.cell(col_width, row_height, f"{subtotal:.2f} AWG", 1, ln=1, align='R')
+
+        self.set_x(label_x)
+        self.cell(col_width, row_height, f"Tax ({tax_rate:.0f}%)", 1)
+        self.set_x(value_x)
+        self.cell(col_width, row_height, f"{tax:.2f} AWG", 1, ln=1, align='R')
 
         self.set_font("Arial", "B", 10)
-        self.set_x(120)
-        self.cell(40, 6, "Total", 1)
-        self.cell(30, 6, f"{total:.2f} AWG", 1, ln=1, align='R')
+        self.set_x(label_x)
+        self.cell(col_width, row_height, "Total", 1)
+        self.set_x(value_x)
+        self.cell(col_width, row_height, f"{total:.2f} AWG", 1, ln=1, align='R')
 
     def footer_section(self):
         self.ln(6)
