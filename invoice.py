@@ -57,7 +57,7 @@ class InvoicePDF(FPDF):
         self.set_font("Arial", "B", 16)
         self.set_xy(0, 15)
         self.cell(0, 10, "INVOICE", ln=True, align="C")
-        self.ln(5)
+        self.ln(2)
 
     def company_info(self):
         self.set_font("Arial", "", 10)
@@ -66,10 +66,10 @@ class InvoicePDF(FPDF):
             "Taz-IT Solutions", "Pos Chikito 99B", "Oranjestad, Aruba",
             "(+297) 699-7692 | jcroes@tazitsolution.com"
         ]:
-            self.cell(100, 6, line, ln=1)
+            self.cell(100, 5, line, ln=1)
 
     def client_info(self, name, address, phone, invoice_number, invoice_date):
-        self.set_y(55)
+        self.set_y(50)
         self.set_font("Arial", "", 10)
         self.set_x(10)
         self.cell(100, 6, f"Bill To: {name}", ln=0)
@@ -81,7 +81,7 @@ class InvoicePDF(FPDF):
         self.cell(60, 6, f"Date: {invoice_date.strftime('%d-%b-%Y')}", ln=1)
         self.set_x(10)
         self.cell(100, 6, phone, ln=1)
-        self.ln(10)
+        self.ln(5)
 
     def line_items_table(self, items):
         self.set_fill_color(230, 230, 230)
@@ -89,37 +89,37 @@ class InvoicePDF(FPDF):
         col_widths = [60, 20, 20, 30, 30]
         headers = ["Description", "Units", "Qty", "Rate", "Total"]
         for h, w in zip(headers, col_widths):
-            self.cell(w, 8, h, 1, 0, 'C', True)
+            self.cell(w, 6, h, 1, 0, 'C', True)
         self.ln()
         self.set_font("Arial", "", 10)
         for row in items:
-            self.cell(col_widths[0], 8, row["desc"], 1)
-            self.cell(col_widths[1], 8, str(row["units"]), 1, 0, 'C')
-            self.cell(col_widths[2], 8, str(row["qty"]), 1, 0, 'C')
-            self.cell(col_widths[3], 8, f"{row['rate']:.2f}", 1, 0, 'R')
-            self.cell(col_widths[4], 8, f"{row['total']:.2f}", 1, 0, 'R')
+            self.cell(col_widths[0], 6, row["desc"], 1)
+            self.cell(col_widths[1], 6, str(row["units"]), 1, 0, 'C')
+            self.cell(col_widths[2], 6, str(row["qty"]), 1, 0, 'C')
+            self.cell(col_widths[3], 6, f"{row['rate']:.2f}", 1, 0, 'R')
+            self.cell(col_widths[4], 6, f"{row['total']:.2f}", 1, 0, 'R')
             self.ln()
 
     def totals_table(self, subtotal, tax, tax_rate, total):
-        self.ln(5)
+        self.ln(2)
         self.set_font("Arial", "", 10)
         self.set_x(120)
-        self.cell(40, 8, "Subtotal", 1)
-        self.cell(30, 8, f"{subtotal:.2f} AWG", 1, ln=1, align='R')
+        self.cell(40, 6, "Subtotal", 1)
+        self.cell(30, 6, f"{subtotal:.2f} AWG", 1, ln=1, align='R')
         self.set_x(120)
-        self.cell(40, 8, f"Tax ({tax_rate:.0f}%)", 1)
-        self.cell(30, 8, f"{tax:.2f} AWG", 1, ln=1, align='R')
+        self.cell(40, 6, f"Tax ({tax_rate:.0f}%)", 1)
+        self.cell(30, 6, f"{tax:.2f} AWG", 1, ln=1, align='R')
         self.set_font("Arial", "B", 10)
         self.set_x(120)
-        self.cell(40, 8, "Total", 1)
-        self.cell(30, 8, f"{total:.2f} AWG", 1, ln=1, align='R')
+        self.cell(40, 6, "Total", 1)
+        self.cell(30, 6, f"{total:.2f} AWG", 1, ln=1, align='R')
 
     def footer_section(self):
-        self.set_y(-50)
-        self.set_font("Arial", "I", 10)
-        self.cell(0, 6, "Thank you for your business!", ln=1)
-        self.cell(0, 6, "Payment due within 14 days.", ln=1)
         self.ln(4)
+        self.set_font("Arial", "I", 10)
+        self.cell(0, 5, "Thank you for your business!", ln=1)
+        self.cell(0, 5, "Payment due within 14 days.", ln=1)
+        self.ln(2)
         self.set_font("Arial", "", 10)
         for line in [
             "Bank Payment Info:",
@@ -129,7 +129,7 @@ class InvoicePDF(FPDF):
             "SWIFT/BIC: ARUBAWAW",
             "Currency: AWG"
         ]:
-            self.cell(0, 6, line, ln=1)
+            self.cell(0, 5, line, ln=1)
 
 # UI
 st.title("🧾 Taz-IT Invoice Generator")
@@ -183,7 +183,7 @@ if st.button("Generate & Upload Invoice"):
             pdf.totals_table(subtotal, tax, tax_rate, total)
             pdf.footer_section()
 
-            filename = f"invoice_{invoice_number}_{client_name.title().replace(' ', '')}.pdf"
+            filename = f"Invoice_{invoice_number}_{client_name.title().replace(' ', '')}.pdf"
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 pdf.output(tmp.name)
 
