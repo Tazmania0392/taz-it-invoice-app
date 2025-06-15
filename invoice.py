@@ -1,3 +1,6 @@
+
+# Taz IT Invoice Generator - Full Application with Client Management, Google Sheets, PDF, and Reverse Tax
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -38,7 +41,7 @@ try:
 except Exception as e:
     st.error(f"Client sheet setup error: {e}")
 
-# Load clients from Google Sheet
+# Load clients
 client_data = sheet_service.spreadsheets().values().get(
     spreadsheetId=SPREADSHEET_ID,
     range=f"{CLIENT_SHEET_NAME}!A2:D"
@@ -46,10 +49,9 @@ client_data = sheet_service.spreadsheets().values().get(
 
 clients_dict = {row[0]: {"company": row[1], "address": row[2], "phone": row[3]} for row in client_data if len(row) == 4}
 
-# UI Title
 st.title("Taz IT Invoice Generator")
 
-# Client selection UI
+# Client selection
 selected_client = st.selectbox("Select Existing Client (optional)", ["New Client"] + list(clients_dict.keys()))
 
 if selected_client != "New Client":
@@ -64,8 +66,8 @@ else:
     client_address = st.text_area("Client Address")
     client_phone = st.text_input("Client Phone")
 
-# Save new client to Google Sheet if new
-if selected_client == "New Client" and client_name and client_address and client_phone and company_name:
+# Save new client
+if selected_client == "New Client" and client_name and company_name and client_address and client_phone:
     if client_name not in clients_dict:
         sheet_service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID,
@@ -74,54 +76,79 @@ if selected_client == "New Client" and client_name and client_address and client
             body={"values": [[client_name, company_name, client_address, client_phone]]}
         ).execute()
 
+# Edit/Delete existing client
+if selected_client != "New Client":
+    with st.expander("Edit Selected Client Info"):
+        new_name = st.text_input("Edit Client Name", value=client_name)
+        new_company = st.text_input("Edit Company Name", value=company_name)
+        new_address = st.text_area("Edit Address", value=client_address)
+        new_phone = st.text_input("Edit Phone", value=client_phone)
+
+        name_conflict = new_name != client_name and new_name in clients_dict
+
+        if st.button("Update Client Info"):
+            if name_conflict:
+                st.warning("Client name already exists. Please choose a unique name.")
+            else:
+                client_values = [new_name, new_company, new_address, new_phone]
+                client_data_updated = [client_values if row[0] == client_name else row for row in client_data]
+                sheet_service.spreadsheets().values().update(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=f"{CLIENT_SHEET_NAME}!A2:D",
+                    valueInputOption="RAW",
+                    body={"values": client_data_updated}
+                ).execute()
+                st.success(f"✅ Client info for '{new_name}' updated!")
+
+        if st.button("❌ Delete Client"):
+            updated_data = [row for row in client_data if row[0] != client_name]
+            sheet_service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{CLIENT_SHEET_NAME}!A2:D",
+                valueInputOption="RAW",
+                body={"values": updated_data}
+            ).execute()
+            st.success(f"🗑️ Client '{client_name}' deleted. Please refresh the app.")
+
 invoice_date = st.date_input("Invoice Date", datetime.today())
 due_date = st.date_input("Payment Due Date")
 tax_rate = st.number_input("Tax Rate (%)", value=12.0)
 
-custom_total = st.number_input("Total Price incl. Tax (AWG) [optional]", value=0.0, help="Fill this only if you want to reverse calculate the subtotal")
-subtotal = 0
-if custom_total > 0:
-    subtotal = custom_total / (1 + tax_rate / 100)
+custom_total = st.number_input("Total Price incl. Tax (AWG) [optional]", value=0.0)
+subtotal = custom_total / (1 + tax_rate / 100) if custom_total > 0 else None
+if subtotal:
     st.info(f"Calculated Subtotal: {subtotal:.2f} AWG")
-else:
-    subtotal = None
 
 manual_invoice = st.checkbox("Enter Invoice Number Manually")
 if manual_invoice:
     invoice_number = st.text_input("Invoice Number")
 else:
     def ensure_invoices_sheet_exists(sheet_service, spreadsheet_id):
-        try:
-            meta = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-            titles = [s["properties"]["title"] for s in meta["sheets"]]
-            if "Invoices" not in titles:
-                sheet_service.spreadsheets().batchUpdate(
-                    spreadsheetId=spreadsheet_id,
-                    body={"requests": [{"addSheet": {"properties": {"title": "Invoices"}}}]}
-                ).execute()
-                headers = [["Date", "Invoice #", "Client Name", "Amount (AWG)", "Tax Rate", "Drive File Link", "Status"]]
-                sheet_service.spreadsheets().values().update(
-                    spreadsheetId=spreadsheet_id,
-                    range="Invoices!A1:G1",
-                    valueInputOption="RAW",
-                    body={"values": headers}
-                ).execute()
-        except Exception as e:
-            st.error(f"Sheet error: {e}")
+        meta = sheet_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        titles = [s["properties"]["title"] for s in meta["sheets"]]
+        if "Invoices" not in titles:
+            sheet_service.spreadsheets().batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"requests": [{"addSheet": {"properties": {"title": "Invoices"}}}]}
+            ).execute()
+            headers = [["Date", "Invoice #", "Client Name", "Amount (AWG)", "Tax Rate", "Drive File Link", "Status"]]
+            sheet_service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range="Invoices!A1:G1",
+                valueInputOption="RAW",
+                body={"values": headers}
+            ).execute()
 
     def get_next_invoice_number(sheet_service, spreadsheet_id):
-        try:
-            result = sheet_service.spreadsheets().values().get(
-                spreadsheetId=spreadsheet_id,
-                range="Invoices!B2:B"
-            ).execute()
-            values = result.get("values", [])
-            if values:
-                last = max([int(v[0]) for v in values if v and v[0].isdigit()])
-                return str(last + 1)
-            return "1001"
-        except:
-            return "1001"
+        result = sheet_service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range="Invoices!B2:B"
+        ).execute()
+        values = result.get("values", [])
+        if values:
+            last = max([int(v[0]) for v in values if v and v[0].isdigit()])
+            return str(last + 1)
+        return "1001"
 
     ensure_invoices_sheet_exists(sheet_service, SPREADSHEET_ID)
     invoice_number = get_next_invoice_number(sheet_service, SPREADSHEET_ID)
@@ -146,7 +173,6 @@ class InvoicePDF(FPDF):
         self.set_font("Helvetica", "B", 16)
         self.set_xy(0, 12)
         self.cell(0, 10, "INVOICE", ln=True, align="C")
-        self.set_line_width(0.5)
         self.line(10, 22, 200, 22)
         self.image("tazit_logo_pdf.png", x=165, y=10, w=35)
 
@@ -166,12 +192,10 @@ class InvoicePDF(FPDF):
         self.cell(100, 6, f"Bill To: {name} ({company})", ln=0)
         self.set_x(130)
         self.cell(60, 6, f"Invoice #: {invoice_number}", ln=1)
-
         self.set_x(10)
         self.cell(100, 6, address, ln=0)
         self.set_x(130)
         self.cell(60, 6, f"Date: {invoice_date.strftime('%d-%b-%Y')}", ln=1)
-
         self.set_x(10)
         self.cell(100, 6, phone, ln=1)
 
@@ -185,21 +209,14 @@ class InvoicePDF(FPDF):
         for h, w in zip(headers, col_widths):
             self.cell(w, 6, h, 1, 0, 'C', True)
         self.ln()
-
         self.set_font("Helvetica", "", 10)
         self.set_text_color(0, 0, 0)
-        fill = False
         for i, row in enumerate(items):
-            if i % 2 == 1:
-                self.set_fill_color(245, 245, 245)
-                fill = True
-            else:
-                fill = False
-            self.cell(col_widths[0], 6, row["desc"], 1, 0, 'L', fill)
-            self.cell(col_widths[1], 6, str(row["units"]), 1, 0, 'C', fill)
-            self.cell(col_widths[2], 6, str(row["qty"]), 1, 0, 'C', fill)
-            self.cell(col_widths[3], 6, f"{row['rate']:.2f}", 1, 0, 'R', fill)
-            self.cell(col_widths[4], 6, f"{row['total']:.2f}", 1, 0, 'R', fill)
+            self.cell(col_widths[0], 6, row["desc"], 1)
+            self.cell(col_widths[1], 6, str(row["units"]), 1, 0, 'C')
+            self.cell(col_widths[2], 6, str(row["qty"]), 1, 0, 'C')
+            self.cell(col_widths[3], 6, f"{row['rate']:.2f}", 1, 0, 'R')
+            self.cell(col_widths[4], 6, f"{row['total']:.2f}", 1, 0, 'R')
             self.ln()
 
     def totals_table(self, subtotal, tax, tax_rate, total):
@@ -244,6 +261,7 @@ class InvoicePDF(FPDF):
         ]:
             self.cell(0, 5, line, ln=1)
 
+# Generate and upload PDF
 if st.button("Generate & Upload Invoice"):
     valid_df = item_df.dropna(subset=["Description"])
     if valid_df.empty:
