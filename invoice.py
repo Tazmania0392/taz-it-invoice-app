@@ -69,7 +69,7 @@ class InvoicePDF(FPDF):
         self.set_font("Helvetica", "", 10)
         self.set_xy(10, 25)
         for line in [
-            "Taz-IT Solutions", "Pos Chikito 99B", "Oranjestad, Aruba",
+            "Taz IT Solutions", "Pos Chikito 99B", "Oranjestad, Aruba",
             "(+297) 699-7692 | jcroes@tazitsolution.com"
         ]:
             self.cell(100, 5, line, ln=1)
@@ -160,7 +160,7 @@ class InvoicePDF(FPDF):
             self.cell(0, 5, line, ln=1)
 
 # Streamlit UI
-st.title("🗋e Taz-IT Invoice Generator")
+st.title("Taz IT Invoice Generator")
 
 client_name = st.text_input("Client Name")
 client_address = st.text_area("Client Address")
@@ -168,6 +168,22 @@ client_phone = st.text_input("Client Phone")
 invoice_date = st.date_input("Invoice Date", datetime.today())
 due_date = st.date_input("Payment Due Date")
 tax_rate = st.number_input("Tax Rate (%)", value=12.0)
+
+custom_total = st.number_input("Total Price incl. Tax (AWG) [optional]", value=0.0, help="Fill this only if you want to reverse calculate the subtotal")
+subtotal = 0
+if custom_total > 0:
+    subtotal = custom_total / (1 + tax_rate / 100)
+    st.info(f"Calculated Subtotal: {subtotal:.2f} AWG")
+else:
+    subtotal = None
+
+manual_invoice = st.checkbox("Enter Invoice Number Manually")
+if manual_invoice:
+    invoice_number = st.text_input("Invoice Number")
+else:
+    sheet_service = build("sheets", "v4", credentials=creds)
+    ensure_invoices_sheet_exists(sheet_service, SPREADSHEET_ID)
+    invoice_number = get_next_invoice_number(sheet_service, SPREADSHEET_ID)
 
 st.markdown("### Line Items")
 item_df = st.data_editor(
@@ -186,13 +202,9 @@ if st.button("Generate & Upload Invoice"):
     else:
         try:
             valid_df["Total"] = valid_df["Units"].astype(float) * valid_df["Qty"].astype(float) * valid_df["Rate (AWG)"].astype(float)
-            subtotal = valid_df["Total"].sum()
-            tax = subtotal * (tax_rate / 100)
-            total = subtotal + tax
-
-            sheet_service = build("sheets", "v4", credentials=creds)
-            ensure_invoices_sheet_exists(sheet_service, SPREADSHEET_ID)
-            invoice_number = get_next_invoice_number(sheet_service, SPREADSHEET_ID)
+            subtotal_final = subtotal if subtotal else valid_df["Total"].sum()
+            tax = subtotal_final * (tax_rate / 100)
+            total = subtotal_final + tax
 
             pdf = InvoicePDF()
             pdf.add_page()
@@ -208,7 +220,7 @@ if st.button("Generate & Upload Invoice"):
             } for _, row in valid_df.iterrows()]
 
             pdf.line_items_table(items)
-            pdf.totals_table(subtotal, tax, tax_rate, total)
+            pdf.totals_table(subtotal_final, tax, tax_rate, total)
             pdf.footer_section()
 
             filename = f"Invoice_{invoice_number}_{client_name.title().replace(' ', '')}.pdf"
