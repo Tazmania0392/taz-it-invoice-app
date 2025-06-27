@@ -1,5 +1,4 @@
-
-# Taz IT Invoice Generator - Full Application with Client Management, Google Sheets, PDF, and Reverse Tax
+# Taz IT Invoice Generator - Full Application with Reverse Tax Support
 
 import streamlit as st
 import pandas as pd
@@ -114,10 +113,20 @@ invoice_date = st.date_input("Invoice Date", datetime.today())
 due_date = st.date_input("Payment Due Date")
 tax_rate = st.number_input("Tax Rate (%)", value=12.0)
 
-custom_total = st.number_input("Total Price incl. Tax (AWG) [optional]", value=0.0)
-subtotal = custom_total / (1 + tax_rate / 100) if custom_total > 0 else None
-if subtotal:
-    st.info(f"Calculated Subtotal: {subtotal:.2f} AWG")
+# Reverse Tax Mode
+reverse_tax_mode = st.checkbox("🔁 Reverse Tax Mode (Enter Total incl. Tax)")
+
+custom_total = 0.0
+subtotal = None
+tax_reverse = None
+
+if reverse_tax_mode:
+    custom_total = st.number_input("Total incl. Tax (AWG)", value=0.0)
+    if custom_total > 0:
+        subtotal = custom_total / (1 + tax_rate / 100)
+        tax_reverse = custom_total - subtotal
+        st.info(f"Calculated Subtotal: {subtotal:.2f} AWG")
+        st.info(f"Extracted Tax ({tax_rate:.1f}%): {tax_reverse:.2f} AWG")
 
 manual_invoice = st.checkbox("Enter Invoice Number Manually")
 if manual_invoice:
@@ -270,7 +279,7 @@ if st.button("Generate & Upload Invoice"):
         try:
             valid_df["Total"] = valid_df["Units"].astype(float) * valid_df["Qty"].astype(float) * valid_df["Rate (AWG)"].astype(float)
             subtotal_final = subtotal if subtotal else valid_df["Total"].sum()
-            tax = subtotal_final * (tax_rate / 100)
+            tax = tax_reverse if subtotal else subtotal_final * (tax_rate / 100)
             total = subtotal_final + tax
 
             pdf = InvoicePDF()
