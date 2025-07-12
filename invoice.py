@@ -75,6 +75,7 @@ def get_oauth_creds():
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]
 CLIENT_SHEET_NAME = "Clients"
+creds = get_oauth_creds()
 sheet_service = build("sheets", "v4", credentials=creds)
 
 # Ensure Clients sheet exists
