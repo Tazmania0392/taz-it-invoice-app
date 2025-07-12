@@ -1,21 +1,50 @@
 # Taz IT Invoice Generator - Full Application with Reverse Tax Support
 
+import os
+import pickle
 import streamlit as st
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 import pandas as pd
 from datetime import datetime
 from fpdf import FPDF
 import tempfile
 import json
 from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
 
-# Load credentials
-service_info = json.loads(st.secrets["GOOGLE_SERVICE_ACCOUNT"])
-creds = service_account.Credentials.from_service_account_info(
-    service_info,
-    scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
-)
+SCOPES = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
+TOKEN_FILE = "token.json"
+
+def get_oauth_creds():
+    if os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, "rb") as token:
+            creds = Credentials.from_authorized_user_info(pickle.load(token), SCOPES)
+    else:
+        creds = None
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = Flow.from_client_secrets_file(
+                "oauth_credentials.json", SCOPES,
+                redirect_uri=f"{st.secrets['REDIRECT_URI']}"
+            )
+            auth_url, _ = flow.authorization_url(prompt="consent")
+            st.markdown(f"[Click here to authorize Google Drive access]({auth_url})")
+            code = st.text_input("Paste the authorization code here:")
+            if code:
+                flow.fetch_token(code=code)
+                creds = flow.credentials
+                with open(TOKEN_FILE, "wb") as token:
+                    pickle.dump(creds.to_json(), token)
+
+    return creds
+
+creds = get_oauth_creds()
 
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]
