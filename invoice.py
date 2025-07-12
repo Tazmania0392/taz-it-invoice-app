@@ -19,15 +19,25 @@ SCOPES = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/a
 TOKEN_FILE = "token.json"
 
 def get_oauth_creds():
-    creds = None
-    if "TOKEN_JSON" in st.secrets:
-        creds_data = json.loads(st.secrets["TOKEN_JSON"])
-        creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
+    from google.auth.transport.requests import Request
 
+    creds = None
+
+    # Use token from secrets if provided
+    if "TOKEN_JSON" in st.secrets:
+        try:
+            creds_data = json.loads(st.secrets["TOKEN_JSON"])
+            creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+        except Exception as e:
+            st.error("❌ Error loading credentials from secrets.")
+            st.exception(e)
+            st.stop()
+
+    # If not valid or missing, trigger auth flow
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+        try:
             flow = Flow.from_client_config(
                 {
                     "installed": {
@@ -43,18 +53,25 @@ def get_oauth_creds():
             )
 
             auth_url, _ = flow.authorization_url(prompt="consent")
-            st.markdown(f"[Click here to authorize Google Drive access]({auth_url})")
-            code = st.text_input("Paste the authorization code here:")
+            st.markdown(f"### 🔐 [Click here to authorize Google Drive access]({auth_url})")
+
+            code = st.text_input("Paste the authorization code here and press Enter:")
 
             if code:
                 flow.fetch_token(code=code)
                 creds = flow.credentials
                 token_json = creds.to_json()
+                st.markdown("✅ Copy the token below and paste it into your Streamlit secrets under `TOKEN_JSON`:")
                 st.code(token_json, language="json")
-                st.warning("⚠️ Copy the above token JSON and paste it into your Streamlit secrets as `TOKEN_JSON`. Then reload the app.")
                 st.stop()
 
+        except Exception as e:
+            st.error("❌ OAuth flow failed")
+            st.exception(e)
+            st.stop()
+
     return creds
+    
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]
 CLIENT_SHEET_NAME = "Clients"
