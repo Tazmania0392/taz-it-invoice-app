@@ -19,33 +19,42 @@ SCOPES = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/a
 TOKEN_FILE = "token.json"
 
 def get_oauth_creds():
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "rb") as token:
-            creds = Credentials.from_authorized_user_info(pickle.load(token), SCOPES)
-    else:
-        creds = None
+    creds = None
+    if "TOKEN_JSON" in st.secrets:
+        creds_data = json.loads(st.secrets["TOKEN_JSON"])
+        creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = Flow.from_client_secrets_file(
-                "oauth_credentials.json", SCOPES,
-                redirect_uri=f"{st.secrets['REDIRECT_URI']}"
+            flow = Flow.from_client_config(
+                {
+                    "installed": {
+                        "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+                        "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "redirect_uris": [st.secrets["REDIRECT_URI"]]
+                    }
+                },
+                SCOPES,
+                redirect_uri=st.secrets["REDIRECT_URI"]
             )
+
             auth_url, _ = flow.authorization_url(prompt="consent")
             st.markdown(f"[Click here to authorize Google Drive access]({auth_url})")
             code = st.text_input("Paste the authorization code here:")
+
             if code:
                 flow.fetch_token(code=code)
                 creds = flow.credentials
-                with open(TOKEN_FILE, "wb") as token:
-                    pickle.dump(creds.to_json(), token)
+                token_json = creds.to_json()
+                st.code(token_json, language="json")
+                st.warning("⚠️ Copy the above token JSON and paste it into your Streamlit secrets as `TOKEN_JSON`. Then reload the app.")
+                st.stop()
 
     return creds
-
-creds = get_oauth_creds()
-
 SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
 PARENT_FOLDER_ID = st.secrets["PARENT_FOLDER_ID"]
 CLIENT_SHEET_NAME = "Clients"
